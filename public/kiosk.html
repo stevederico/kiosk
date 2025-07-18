@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frankie Food Court Kiosk</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    let cart = [];
+    let total = 0;
+    let currentView = 'menu'; // 'menu', 'checkout'
+    let editingItemIndex = -1;
+
+    async function fetchMenu() {
+      const response = await fetch('/menu_items');
+      const menuItems = await response.json();
+      const menuGrid = document.getElementById('menu-grid');
+      menuItems.forEach(item => {
+        const menuItem = document.createElement('div');
+        menuItem.className = "bg-blue-500 text-white p-0 flex flex-col justify-between items-center cursor-pointer hover:bg-blue-600 transition-colors border border-black shadow-2xl drop-shadow-[4px_4px_0_rgba(0,0,0,0.75)]";
+        menuItem.onclick = () => addToCart(item.id, item.name, item.price);
+        menuItem.innerHTML = `
+          <div class="w-full h-32 bg-gray-200 flex items-center justify-center border border-black">
+            <span class="text-gray-500 text-xs">Image</span>
+          </div>
+          <h3 class="text-sm font-semibold text-center">${item.name}</h3>
+          <p class="text-xl font-bold mt-auto">$${item.price}</p>
+        `;
+        menuGrid.appendChild(menuItem);
+      });
+    }
+
+    function addToCart(id, name, price) {
+      const numericPrice = parseFloat(price);
+      const existingItem = cart.find(item => item.id === id);
+      if (existingItem) {
+        existingItem.qty += 1;
+      } else {
+        cart.push({ id, name, price: numericPrice, qty: 1 });
+      }
+      total += numericPrice;
+      updateCart();
+      saveCart();
+    }
+
+    function removeFromCart(index) {
+      const item = cart[index];
+      const itemPrice = parseFloat(item.price);
+      total -= itemPrice * item.qty;
+      cart.splice(index, 1);
+      updateCart();
+      saveCart();
+    }
+
+    function showEditModal(index) {
+      editingItemIndex = index;
+      const item = cart[index];
+      document.getElementById('edit-item-name').textContent = item.name;
+      document.getElementById('edit-quantity').textContent = item.qty;
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function hideEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+      editingItemIndex = -1;
+    }
+
+    function changeQuantity(delta) {
+      const quantityElement = document.getElementById('edit-quantity');
+      let quantity = parseInt(quantityElement.textContent) + delta;
+      if (quantity < 1) quantity = 1;
+      quantityElement.textContent = quantity;
+    }
+
+    function confirmEdit() {
+      if (editingItemIndex >= 0) {
+        const newQuantity = parseInt(document.getElementById('edit-quantity').textContent);
+        const item = cart[editingItemIndex];
+        const itemPrice = parseFloat(item.price);
+        total -= itemPrice * item.qty;
+        item.qty = newQuantity;
+        total += itemPrice * item.qty;
+        updateCart();
+        saveCart();
+      }
+      hideEditModal();
+    }
+
+    function removeCurrentItem() {
+      if (editingItemIndex >= 0) {
+        removeFromCart(editingItemIndex);
+      }
+      hideEditModal();
+    }
+
+    function showCheckout() {
+      currentView = 'checkout';
+      document.getElementById('menu-grid').classList.add('hidden');
+      document.getElementById('checkout-screen').classList.remove('hidden');
+      const finalTotal = (total || 0) * 1.08;
+      document.getElementById('checkout-total').textContent = `$${finalTotal.toFixed(2)}`;
+    }
+
+    function returnToMenu() {
+      currentView = 'menu';
+      document.getElementById('menu-grid').classList.remove('hidden');
+      document.getElementById('checkout-screen').classList.add('hidden');
+    }
+
+    function updateCart() {
+      const cartList = document.getElementById('cart');
+      const clearCartButton = document.getElementById('clear-cart-button');
+      const placeOrderButton = document.getElementById('place-order-button');
+      const instruction = document.getElementById('cart-placeholder');
+      const taxLabel = document.getElementById('tax-label');
+      const taxValue = document.getElementById('tax');
+      const totalLabel = document.getElementById('total-label');
+      const totalValue = document.getElementById('total-amount');
+
+      cartList.innerHTML = '';
+
+      if (cart.length > 0) {
+        // Show placeholder text, "Clear Cart" button, and "Place Order" button
+        instruction.classList.remove('hidden');
+        clearCartButton.classList.remove('hidden');
+        placeOrderButton.classList.remove('hidden');
+
+        // Hide tax and total labels and values
+        taxLabel.classList.add('opacity-0');
+        taxValue.classList.add('opacity-0');
+        totalLabel.classList.add('opacity-0');
+        totalValue.classList.add('opacity-0');
+
+        cart.forEach((item, index) => {
+          const cartItem = document.createElement('div');
+          cartItem.className = "border-b border-gray-200 pb-3 mb-3 cursor-pointer hover:bg-gray-50 p-2";
+          cartItem.onclick = () => removeFromCart(index);
+          cartItem.innerHTML = `
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-orange-200 flex items-center justify-center">
+                <span class="text-xs text-orange-600">🌭</span>
+              </div>
+              <div class="flex-1">
+                <div class="font-medium text-gray-800">${item.name}</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-sm text-gray-600">Quantity ${item.qty}</span>
+                  <button class="bg-green-500 text-white px-3 py-1 text-xs font-medium" onclick="event.stopPropagation(); showEditModal(${index})">Edit</button>
+                </div>
+              </div>
+              <div class="text-lg font-bold">$${(parseFloat(item.price) * item.qty).toFixed(2)}</div>
+            </div>
+          `;
+          cartList.appendChild(cartItem);
+        });
+      } else {
+        // Hide placeholder text, "Clear Cart" button, and "Place Order" button
+        instruction.classList.add('hidden');
+        clearCartButton.classList.add('hidden');
+        placeOrderButton.classList.add('hidden');
+
+        // Show tax and total labels and values
+        taxLabel.classList.remove('opacity-0');
+        taxValue.classList.remove('opacity-0');
+        totalLabel.classList.remove('opacity-0');
+        totalValue.classList.remove('opacity-0');
+      }
+
+      document.getElementById('subtotal').textContent = `$${(total || 0).toFixed(2)}`;
+      document.getElementById('tax').textContent = `$${((total || 0) * 0.08).toFixed(2)}`;
+      document.getElementById('total-amount').textContent = `$${((total || 0) * 1.08).toFixed(2)}`;
+    }
+
+    function saveCart() {
+      localStorage.setItem('cart', JSON.stringify(cart));
+      localStorage.setItem('total', total.toString());
+    }
+
+    function clearCart() {
+      cart = [];
+      total = 0;
+      updateCart();
+      saveCart();
+    }
+
+    async function submitOrder() {
+      if (cart.length === 0) {
+        alert("Your cart is empty!");
+        return;
+      }
+
+      // Show tax and total labels and values
+      document.getElementById('tax-label').classList.remove('opacity-0');
+      document.getElementById('tax').classList.remove('opacity-0');
+      document.getElementById('total-label').classList.remove('opacity-0');
+      document.getElementById('total-amount').classList.remove('opacity-0');
+
+      showCheckout();
+    }
+
+    window.onload = () => {
+      const savedCart = localStorage.getItem('cart');
+      const savedTotal = localStorage.getItem('total');
+      cart = savedCart ? JSON.parse(savedCart) : [];
+      total = savedTotal ? parseFloat(savedTotal) : 0;
+      fetchMenu();
+      updateCart();
+    };
+  </script>
+</head>
+<body class="bg-gray-600 h-screen flex">
+  <!-- Left Panel - Cart -->
+  <div class="w-1/5 bg-white h-4/5 flex flex-col border border-black overflow-y-auto">
+    <!-- Header -->
+    <div class="mb-0">
+      <img src="/images/frankie-logo.png" alt="Frankie Logo" class="w-full h-auto mb-0  ">
+      <h1 class="text-4xl font-semibold text-center mb-4 border-t border-5">Welcome to the Frankie Food Court Kiosk!</h1>
+      <div class="flex items-center text-sm text-gray-600 justify-center">
+        <span class="mr-2">👆</span>
+        <span>Please tap your selection to begin your order.</span>
+      </div>
+    </div>
+
+    <!-- Cart Items -->
+    <div class="flex-1">
+      <div id="cart-placeholder" class="text-2xl text-gray-600 mb-4 p-3 bg-gray-100 hidden">
+        You can change or remove an item on the receipt by tapping it.
+      </div>
+      <div id="cart" class="space-y-2 mb-4"></div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="absolute bottom-0 left-0 w-1/5 h-1/5 flex flex-col-reverse space-y-2 space-y-reverse">
+      <button id="place-order-button" onclick="submitOrder()" class="w-full bg-green-600 text-white py-3 font-semibold hover:bg-green-700 border border-black hidden">
+        PLACE ORDER
+      </button>
+      <button id="clear-cart-button" onclick="clearCart()" class="w-full bg-blue-500 text-white py-2 border border-black hidden">
+        CANCEL ORDER
+      </button>
+    </div>
+
+    <!-- Totals -->
+    <div class="border border-black border-2 pt-0 text-3xl">
+      <div class="flex justify-between">
+        <span>Sub-Total:</span>
+        <span id="subtotal">$0.00</span>
+      </div>
+      <div class="flex justify-between">
+        <span id="tax-label" class="opacity-0">Tax:</span>
+        <span id="tax" class="opacity-0">$0.00</span>
+      </div>
+      <div class="flex justify-between font-bold text-3xl">
+        <span id="total-label" class="opacity-0">Total:</span>
+        <span id="total-amount" class="opacity-0">$0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel - Menu Grid -->
+  <div class="flex-1 ">
+    <div class="bg-white border border-black p-6">
+      <div id="menu-grid" class="grid grid-cols-8 gap-4 h-full">
+       
+      </div>
+    </div>
+    
+    <!-- Checkout Screen -->
+    <div id="checkout-screen" class="hidden flex flex-col items-center justify-center h-full bg-white border border-black">
+      <div class="text-center">
+        <h2 class="text-3xl font-bold mb-8">Balance Due: <span id="checkout-total">$0.00</span></h2>
+        <p class="text-lg text-gray-600 mb-8">Follow prompts on PIN pad.</p>
+        <div class="mb-8">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 150'%3E%3Crect width='200' height='150' fill='%234A90E2' rx='0'/%3E%3Crect x='20' y='20' width='160' height='60' fill='%232E5BBA' rx='0'/%3E%3Ctext x='100' y='50' text-anchor='middle' fill='white' font-size='12'%3EPIN PAD%3C/text%3E%3Ccircle cx='50' cy='110' r='8' fill='%23333'/%3E%3Ccircle cx='80' cy='110' r='8' fill='%23333'/%3E%3Ccircle cx='110' cy='110' r='8' fill='%23333'/%3E%3Ccircle cx='65' cy='130' r='8' fill='%23333'/%3E%3Ccircle cx='95' cy='130' r='8' fill='%23333'/%3E%3C/svg%3E" alt="PIN Pad" class="w-48 h-36 mx-auto">
+        </div>
+        <button onclick="returnToMenu()" class="bg-blue-500 text-white px-8 py-3 font-semibold hover:bg-blue-600 border border-black">
+          Return to Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-8 max-w-md w-full mx-4">
+      <div class="bg-blue-500 text-white p-3  -mx-8 -mt-8 mb-6">
+        <h3 class="text-lg font-semibold">Quantity Change</h3>
+      </div>
+      
+      <div class="text-center mb-6">
+        <p class="text-gray-600 mb-2">Change the quantity or remove the item:</p>
+        <p class="font-semibold text-lg" id="edit-item-name">Hotdog & Soda</p>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 mb-6">
+        <button onclick="changeQuantity(-1)" class="bg-blue-500 text-white w-12 h-12  text-2xl font-bold hover:bg-blue-600">-</button>
+        <div class="bg-gray-100 px-6 py-3  text-2xl font-bold min-w-16 text-center" id="edit-quantity">1</div>
+        <button onclick="changeQuantity(1)" class="bg-blue-500 text-white w-12 h-12  text-2xl font-bold hover:bg-blue-600">+</button>
+        <button onclick="removeCurrentItem()" class="bg-blue-500 text-white px-4 py-3  font-semibold hover:bg-blue-600">Remove Item</button>
+      </div>
+
+      <div class="flex gap-4">
+        <button onclick="hideEditModal()" class="flex-1 bg-blue-500 text-white py-3  font-semibold hover:bg-blue-600">Cancel</button>
+        <button onclick="confirmEdit()" class="flex-1 bg-green-500 text-white py-3  font-semibold hover:bg-green-600">OK</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
