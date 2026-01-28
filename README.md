@@ -1,100 +1,56 @@
-# Kiosk
+# Kiosk 🍕
 
 <img width="2555" height="1334" alt="Screenshot 2025-07-17 at 8 59 43 PM" src="https://github.com/user-attachments/assets/7241eeed-48fa-4400-ac20-b19fa8a02339" />
 
-A modern Rails 8 self-service kiosk ordering application for food courts and quick-service restaurants. Built with Hotwire for real-time interactions without JavaScript complexity.
+A self-service food court kiosk built with Rails 8 and Hotwire. Touch-friendly UI, real-time updates, runs on SQLite.
 
-## Tech Stack
-
-- **Rails 8.0.2** - Modern Ruby on Rails framework
-- **Ruby 3.4.5** - Latest Ruby version
-- **SQLite** - Lightweight embedded database
-- **Hotwire** - Turbo and Stimulus for reactive UI
-- **Solid Queue** - Database-backed Active Job adapter
-- **Solid Cache** - Database-backed Rails cache
-- **Kamal** - Zero-downtime Docker deployments
-- **Thruster** - HTTP/2 asset caching and compression
-
-## Prerequisites
-
-- Ruby 3.4.5
-- SQLite 3.8.0+
-- Bundler
-- Docker (for deployment)
-
-## Setup
+## Quick Start 🚀
 
 ```bash
-# Install dependencies
 bundle install
-
-# Setup database
 bin/rails db:setup
-
-# Start the server
 bin/rails server
 ```
 
-Visit `http://localhost:3000` to see the kiosk interface.
+That's it. Visit `http://localhost:3000` and start ordering.
 
-## Database
+## What's Inside 📦
 
-The app uses SQLite with separate databases for:
-- Primary (menu items, orders)
-- Cache (Solid Cache)
-- Queue (Solid Queue)
-- Cable (Action Cable)
+- **Rails 8.0.2** with Hotwire (Turbo + Stimulus)
+- **SQLite** for everything (primary DB, cache, queue, cable)
+- **Solid Queue** runs background jobs
+- **Kamal** for zero-downtime deploys
+- **Thruster** for HTTP/2 and asset compression
 
-### Seed Data
+No JavaScript framework needed. No Redis required. Just Rails doing Rails things.
 
-Default menu includes food court items (pizza, hotdogs, salads, etc.). Customize via `db/seeds.rb`.
+## Customize the Menu 🍔
 
-## Deployment
+Default seed data has Costco food court vibes (hotdog combos, pizza slices, churros). Edit `db/seeds.rb` to make it yours.
 
-### Docker
+## Deploy 🐳
 
-Build and run locally:
-
+**Docker:**
 ```bash
 docker build -t kiosk .
-docker run -d -p 80:80 -e RAILS_MASTER_KEY=<your-key> --name kiosk kiosk
+docker run -d -p 80:80 -e RAILS_MASTER_KEY=<key> kiosk
 ```
 
-### Kamal
-
-Configure deployment settings in `config/deploy.yml`:
-
-1. Update server IPs
-2. Set domain and SSL settings
-3. Configure registry credentials
-4. Set secrets in `.kamal/secrets`
-
-Deploy:
-
+**Kamal:**
 ```bash
+# Edit config/deploy.yml with your server details
 bin/kamal setup
 bin/kamal deploy
 ```
 
-**Important:** Never commit `config/master.key`. Store it securely and provide via environment or secrets manager.
+Don't commit `config/master.key` - ever.
 
-## Configuration
-
-- **Environment:** Configure via `config/environments/`
-- **Credentials:** Use `rails credentials:edit` for encrypted secrets
-- **Deploy:** Edit `config/deploy.yml` with your server details (placeholders provided)
-
-## Development
+## Development 🛠️
 
 ```bash
-# Console
-bin/rails console
-
-# Database console
-bin/rails dbconsole
-
-# Run migrations
-bin/rails db:migrate
+bin/rails console      # Rails console
+bin/rails dbconsole    # SQLite console
+bin/rails db:migrate   # Run migrations
 ```
 
 ## License
