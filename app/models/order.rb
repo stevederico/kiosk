@@ -1,3 +1,3 @@
 class Order < ApplicationRecord
-    serialize :items, Array
+    serialize :items, coder: JSON
 end

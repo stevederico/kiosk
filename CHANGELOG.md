@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+  Fix serialize compatibility
+  Add Umami analytics
+
 ## 0.2.0
   Add Umami analytics
 
