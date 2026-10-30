@@ -10,6 +10,7 @@ pub mod db;
 pub mod hrana;
 pub mod http;
 pub mod json;
+pub mod kiosk;
 pub mod kdf;
 pub mod middleware;
 pub mod routes;

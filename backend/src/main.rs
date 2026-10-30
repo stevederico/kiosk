@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use skateboard_backend::http;
 use skateboard_backend::json::Json;
+use skateboard_backend::kiosk;
 use skateboard_backend::routes;
 use skateboard_backend::state::AppState;
 
@@ -19,12 +20,18 @@ fn main() {
         }
     };
 
+    // Kiosk tables and seed menu (Rails `db:prepare`), before taking traffic.
+    if let Err(e) = kiosk::prepare(&state) {
+        eprintln!("failed to start: {e}");
+        std::process::exit(1);
+    }
+
     spawn_cleanup(Arc::clone(&state));
 
     let mut cfg = http::Config::default();
     cfg.port = state.port;
     let st = Arc::clone(&state);
-    let server = match http::serve(cfg, move |req| routes::handle(&st, req)) {
+    let server = match http::serve(cfg, move |req| kiosk::handle(&st, req)) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("failed to bind port {}: {e}", state.port);
