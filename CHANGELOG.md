@@ -1,5 +1,9 @@
 # Changelog
 
+0.7.1
+
+  Join forwarded lines
+
 0.7.0
 
   Cap param depth

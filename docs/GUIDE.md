@@ -1373,7 +1373,7 @@ There is no global per-route request quota. Targeted protections:
 
 | Control | Scope | Behavior |
 |---------|-------|----------|
-| Auth rate limit | Per client IP on `/api/signup` and `/api/signin` | 20 requests per 15 minutes; 429 + `Retry-After`. Set `TRUST_PROXY` to the number of trusted reverse proxies in front of the process (`1` for a single proxy such as Railway); the key is taken Nth-from-last, never the client-supplied leftmost hop. Leave unset when exposed directly |
+| Auth rate limit | Per client IP on `/api/signup` and `/api/signin` | 20 requests per 15 minutes; 429 + `Retry-After`. Set `TRUST_PROXY` to the number of trusted reverse proxies in front of the process (`1` for a single proxy such as Railway); the key is taken Nth-from-last across every `X-Forwarded-For` line joined in order, never the client-supplied leftmost hop. Leave unset when exposed directly |
 | Request deadline | Every HTTP request | 15s wall clock for headers+body; 30s idle keep-alive. Slow dribbles get 408. Per-syscall `read_timeout` is not enough |
 | Sign-in lockout | Per email + client IP | Failed attempts accumulate in a 15-minute window; the pair locks out after the threshold and decays automatically |
 | Usage limit | Per user, non-subscribers | `POST /api/usage` answers 429 once `FREE_USAGE_LIMIT` operations are consumed in the month |

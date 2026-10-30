@@ -475,6 +475,36 @@ fn post_orders_limit_counts_rejected_posts() {
 }
 
 #[test]
+fn post_orders_second_forwarded_for_line_is_rate_limited() {
+    // QA sent a fresh first X-Forwarded-For line each time: 13 of 13 saved.
+    // With every line joined, TRUST_PROXY=1 keys on the proxy-added address.
+    let st = state();
+    let real = format!("198.51.100.{}", SEQ.fetch_add(1, Ordering::Relaxed) % 250);
+    let statuses: Vec<u16> = (0..=limit::ORDER_LIMIT)
+        .map(|i| {
+            let mut r = post_json("/orders", r#"{"total":"1"}"#, Some(SAME_ORIGIN));
+            r.peer_ip = "10.0.0.1".into();
+            r.set_test_header("x-forwarded-for", &format!("203.0.113.{i}"));
+            r.set_test_header("x-forwarded-for", &real);
+            let ip = crate::routes::client_ip_for(&r, 1);
+            post_orders(&st, &r, &ip).status
+        })
+        .collect();
+    assert_eq!(statuses.last(), Some(&429), "{statuses:?}");
+    assert_eq!(order_count(&st), limit::ORDER_LIMIT);
+}
+
+#[test]
+fn post_orders_rate_limit_key_skips_hops_across_lines() {
+    // TRUST_PROXY=2: the address the first trusted proxy saw, even when the
+    // second proxy added its own line.
+    let mut r = req("POST", "/orders");
+    r.set_test_header("x-forwarded-for", "203.0.113.5, 198.51.100.20");
+    r.set_test_header("x-forwarded-for", "172.70.9.9");
+    assert_eq!(crate::routes::client_ip_for(&r, 2), "198.51.100.20");
+}
+
+#[test]
 fn get_orders_is_404() {
     assert_eq!(handle(&state(), req("GET", "/orders")).status, 404);
 }

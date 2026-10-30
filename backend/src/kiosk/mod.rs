@@ -122,7 +122,7 @@ fn dispatch(state: &AppState, req: &Request) -> Response {
     match (route(&path), is_read, req.method == "POST") {
         (Route::Root, true, _) => controller(state, req, || page(state, req)),
         (Route::MenuItems, true, _) => controller(state, req, || menu(state, req)),
-        (Route::Orders, _, true) => post_orders(state, req),
+        (Route::Orders, _, true) => post_orders(state, req, &routes::client_ip(req)),
         (Route::Other, true, _) if !path.starts_with("/api/") => static_file(state, &path),
         _ => error_page(state, 404),
     }
@@ -164,11 +164,14 @@ fn menu(state: &AppState, req: &Request) -> Response {
 /// Rails' order: Rack::MethodOverride parses a form body before the
 /// controller, so a form past Rack's limits is 400 even for an old browser
 /// (406) or a foreign origin (422).
-fn post_orders(state: &AppState, req: &Request) -> Response {
+///
+/// `client_ip` keys the limit: [`routes::client_ip`], every
+/// `X-Forwarded-For` line joined, `TRUST_PROXY` hops from the right.
+fn post_orders(state: &AppState, req: &Request, client_ip: &str) -> Response {
     if req.body.len() > ORDER_BODY_MAX {
         return Response::text(413, "Payload Too Large");
     }
-    if let Err(secs) = ORDER_LIMITER.check(&routes::client_ip(req), config::now_ms()) {
+    if let Err(secs) = ORDER_LIMITER.check(client_ip, config::now_ms()) {
         return Response::text(429, "Too Many Requests")
             .set_header("Retry-After", &secs.to_string());
     }

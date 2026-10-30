@@ -1452,16 +1452,24 @@ pub(crate) fn client_ip(req: &Request) -> String {
     let hops = config::env("TRUST_PROXY")
         .and_then(|v| v.trim().parse::<usize>().ok())
         .unwrap_or(0);
+    client_ip_for(req, hops)
+}
+
+/// [`client_ip`] with an explicit trusted-hop count (`TRUST_PROXY`).
+///
+/// Every `X-Forwarded-For` line counts: RFC 7230 §3.2.2 makes repeated lines
+/// one comma-joined list, in order. Reading only the first let a client send
+/// its own line ahead of the one a proxy added and pick its bucket.
+pub(crate) fn client_ip_for(req: &Request, hops: usize) -> String {
     if hops > 0 {
-        if let Some(xff) = req.header("x-forwarded-for") {
-            let chain: Vec<&str> = xff
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect();
-            if let Some(ip) = chain.len().checked_sub(hops).and_then(|i| chain.get(i)) {
-                return (*ip).to_string();
-            }
+        let joined = req.headers.get_all("x-forwarded-for").join(",");
+        let chain: Vec<&str> = joined
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if let Some(ip) = chain.len().checked_sub(hops).and_then(|i| chain.get(i)) {
+            return (*ip).to_string();
         }
     }
     req.peer_ip.clone()
@@ -2066,6 +2074,84 @@ mod tests {
         unsafe {
             std::env::remove_var("TRUST_PROXY");
         }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A request from `peer` carrying one `X-Forwarded-For` field per line.
+    fn forwarded(peer: &str, lines: &[&str]) -> Request {
+        let mut req = Request::for_test("POST", "/api/signin");
+        req.peer_ip = peer.into();
+        for line in lines {
+            req.set_test_header("x-forwarded-for", line);
+        }
+        req
+    }
+
+    #[test]
+    fn client_ip_joins_every_forwarded_for_line() {
+        let req = forwarded("10.0.0.1", &["203.0.113.66", "198.51.100.10"]);
+        assert_eq!(client_ip_for(&req, 1), "198.51.100.10");
+    }
+
+    #[test]
+    fn client_ip_counts_hops_across_lines() {
+        let req = forwarded("10.0.0.1", &["203.0.113.66, 198.51.100.10", "172.70.1.2"]);
+        assert_eq!(
+            (
+                client_ip_for(&req, 1),
+                client_ip_for(&req, 2),
+                client_ip_for(&req, 3)
+            ),
+            (
+                "172.70.1.2".to_string(),
+                "198.51.100.10".to_string(),
+                "203.0.113.66".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn client_ip_skips_empty_forwarded_for_lines() {
+        let req = forwarded("10.0.0.1", &["198.51.100.10", "", " , "]);
+        assert_eq!(client_ip_for(&req, 1), "198.51.100.10");
+    }
+
+    #[test]
+    fn client_ip_ignores_forwarded_for_without_trust_proxy() {
+        let req = forwarded("10.0.0.1", &["203.0.113.66", "198.51.100.10"]);
+        assert_eq!(client_ip_for(&req, 0), "10.0.0.1");
+    }
+
+    #[test]
+    fn auth_rate_limit_counts_a_second_forwarded_for_line() {
+        // QA: a client-supplied first line used to mint a fresh bucket.
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: ENV_LOCK is held for the whole test so TRUST_PROXY cannot race.
+        unsafe {
+            std::env::set_var("TRUST_PROXY", "1");
+        }
+        let (state, dir) = test_state_locked();
+        let now = config::now_ms();
+        for _ in 0..crate::stores::AUTH_RATE_LIMIT {
+            assert!(
+                !state
+                    .auth_rate
+                    .check_and_record("198.51.100.77", now)
+                    .limited
+            );
+        }
+        let mut req = forwarded("10.0.0.1", &["203.0.113.9", "198.51.100.77"]);
+        req.set_test_body(
+            br#"{"email":"lines@example.com","password":"secret1","name":"L"}"#.to_vec(),
+        );
+        let status = handle(&state, req).status;
+        unsafe {
+            std::env::remove_var("TRUST_PROXY");
+        }
+        assert_eq!(
+            status, 429,
+            "a second X-Forwarded-For line escaped the limit"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
