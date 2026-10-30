@@ -1,6 +1,7 @@
 # Kiosk parity checklist
 
 Source: `~/Projects/kiosk` (Rails 8.0.2, commit `7c8be77`, version 0.4.0), read-only.
+Target: this repo on skateboard 5.13.0 / skateboard-ui 5.11.0.
 Live: `https://kiosk.bixbyapps.com` (Rails + Thruster in a Docker image, port 80, no volume).
 Live GETs on 2026-10-30 matched the repo (only the CDN's injected challenge script differs).
 
@@ -109,6 +110,8 @@ How each item was checked:
 - Behavior: 58 Rust tests in `backend/src/kiosk/` use values captured from the Rails app (UA matrix of 32 agents, decimal casts, float and string encodings, stored order rows)
 - Page: the same scripted browser run (`scripts/parity/ui-scenario.sh`) (add, edit, remove by row, remove in dialog, place order, return, reload, cancel) gave identical totals, visibility and `localStorage` on both apps; screenshots of the menu, dialog and checkout match
 - Data: order created, container restarted, menu not re-seeded, orders kept, `PRAGMA integrity_check` ok on the volume copy
+
+Re-checked after the update to skateboard 5.13.0 / skateboard-ui 5.11.0 (`cfec801`): same results. 49 of 50 HTTP checks match (only `/api/health`), the scripted page run matches, data survives a restart. Details in REPORT.md, "Upgrade to 5.13.0"
 
 Differences on purpose (details and Steve's decisions in REPORT.md):
 
