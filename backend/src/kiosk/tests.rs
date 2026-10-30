@@ -64,10 +64,13 @@ fn state() -> AppState {
     st
 }
 
+/// A request from a fresh client IP, so the process-wide `POST /orders`
+/// limiter never carries over between tests.
 fn req(method: &str, path: &str) -> Request {
     let (raw, query) = path.split_once('?').unwrap_or((path, ""));
     let mut r = Request::for_test(method, raw);
     r.query = query.to_string();
+    r.peer_ip = format!("test-{}", SEQ.fetch_add(1, Ordering::Relaxed));
     r.set_test_header("user-agent", CHROME_120);
     r.set_test_header("host", "kiosk.bixbyapps.com");
     r
@@ -260,6 +263,123 @@ fn post_orders_form_encoded() {
 fn post_orders_bad_json_is_400() {
     let res = handle(&state(), post_json("/orders", "{bad", Some("https://kiosk.bixbyapps.com")));
     assert_eq!((res.status, body(&res).as_str()), (400, "bad request page"));
+}
+
+const SAME_ORIGIN: &str = "https://kiosk.bixbyapps.com";
+
+/// A form `POST /orders` with `n` nested `[a]` segments under `items`.
+fn post_nested_form(n: usize, origin: Option<&str>) -> Request {
+    let mut r = req("POST", "/orders");
+    r.set_test_header("content-type", "application/x-www-form-urlencoded");
+    if let Some(o) = origin {
+        r.set_test_header("origin", o);
+    }
+    r.set_test_body(format!("items{}=1&total=1", "[a]".repeat(n)).into_bytes());
+    r
+}
+
+fn order_count(st: &AppState) -> usize {
+    st.pool.with(|db| db.query("SELECT id FROM orders", &[])).expect("query").len()
+}
+
+#[test]
+fn post_orders_bad_json_without_origin_is_400_like_rails() {
+    // Rails reads the JSON body (400) before failing the token check (422).
+    let res = handle(&state(), post_json("/orders", "{bad", None));
+    assert_eq!(res.status, 400);
+}
+
+#[test]
+fn post_orders_bad_json_cross_origin_is_422_like_rails() {
+    // Rails rejects a foreign Origin before reading the body.
+    let res = handle(&state(), post_json("/orders", "{bad", Some("https://evil.example")));
+    assert_eq!(res.status, 422);
+}
+
+#[test]
+fn post_orders_deep_form_is_400_and_server_keeps_serving() {
+    // QA's attack shape, cut to fit the 16 KiB cap: 2,000 levels, same origin.
+    let st = state();
+    let mut r = post_nested_form(2_000, None);
+    r.set_test_header("sec-fetch-site", "same-origin");
+    let res = handle(&st, r);
+    assert_eq!((res.status, body(&res).as_str()), (400, "bad request page"));
+    assert_eq!(order_count(&st), 0);
+    assert_eq!(handle(&st, req("GET", "/menu_items")).status, 200);
+}
+
+#[test]
+fn post_orders_depth_33_form_is_400() {
+    assert_eq!(handle(&state(), post_nested_form(32, Some(SAME_ORIGIN))).status, 400);
+}
+
+#[test]
+fn post_orders_depth_32_form_saves() {
+    let st = state();
+    assert_eq!(handle(&st, post_nested_form(31, Some(SAME_ORIGIN))).status, 201);
+    assert_eq!(order_count(&st), 1);
+}
+
+#[test]
+fn post_orders_deep_form_is_400_before_browser_and_origin_checks() {
+    // Rack::MethodOverride parses the form first: Rails answered 400 for an
+    // unsupported browser and for a foreign Origin alike.
+    let mut old = post_nested_form(40, Some("https://evil.example"));
+    old.set_test_header("user-agent", CHROME_119);
+    assert_eq!(handle(&state(), old).status, 400);
+}
+
+#[test]
+fn post_orders_over_16_kib_is_413() {
+    let st = state();
+    let mut r = post_json("/orders", &format!(r#"{{"items":"{}"}}"#, "x".repeat(ORDER_BODY_MAX)), Some(SAME_ORIGIN));
+    r.set_test_header("sec-fetch-site", "same-origin");
+    assert_eq!(handle(&st, r).status, 413);
+    assert_eq!(order_count(&st), 0);
+}
+
+#[test]
+fn post_orders_qa_60kb_payload_is_413() {
+    assert_eq!(handle(&state(), post_nested_form(20_000, Some(SAME_ORIGIN))).status, 413);
+}
+
+#[test]
+fn post_orders_at_16_kib_is_not_413() {
+    let pad = ORDER_BODY_MAX - r#"{"items":""}"#.len();
+    let r = post_json("/orders", &format!(r#"{{"items":"{}"}}"#, "x".repeat(pad)), Some(SAME_ORIGIN));
+    assert_eq!(handle(&state(), r).status, 201);
+}
+
+#[test]
+fn post_orders_eleventh_in_a_minute_is_429() {
+    let st = state();
+    let ip = format!("rate-{}", SEQ.fetch_add(1, Ordering::Relaxed));
+    let post = || {
+        let mut r = post_json("/orders", r#"{"total":"1"}"#, Some(SAME_ORIGIN));
+        r.peer_ip = ip.clone();
+        r
+    };
+    for _ in 0..limit::ORDER_LIMIT {
+        assert_eq!(handle(&st, post()).status, 201);
+    }
+    let res = handle(&st, post());
+    assert_eq!(res.status, 429);
+    assert!(header(&res, "retry-after").is_some_and(|v| v.parse::<i64>().is_ok_and(|s| (1..=60).contains(&s))));
+    assert_eq!(order_count(&st), limit::ORDER_LIMIT);
+}
+
+#[test]
+fn post_orders_limit_counts_rejected_posts() {
+    let st = state();
+    let ip = format!("rate-{}", SEQ.fetch_add(1, Ordering::Relaxed));
+    for _ in 0..limit::ORDER_LIMIT {
+        let mut r = post_json("/orders", "{}", Some("https://evil.example"));
+        r.peer_ip = ip.clone();
+        assert_eq!(handle(&st, r).status, 422);
+    }
+    let mut r = post_json("/orders", "{}", Some(SAME_ORIGIN));
+    r.peer_ip = ip;
+    assert_eq!(handle(&st, r).status, 429);
 }
 
 #[test]

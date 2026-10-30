@@ -14,6 +14,7 @@
 
 pub mod browser;
 pub mod encode;
+pub mod limit;
 pub mod params;
 pub mod store;
 
@@ -23,7 +24,9 @@ use crate::http::{Request, Response};
 use crate::middleware;
 use crate::routes;
 use crate::state::AppState;
+use limit::OrderLimiter;
 use params::Param;
+use std::sync::LazyLock;
 
 /// The template CSP plus `data:` images (the checkout screen's inline PIN pad
 /// SVG). No third-party script or beacon hosts.
@@ -40,6 +43,13 @@ const DYNAMIC_CACHE: &str = "max-age=0, private, must-revalidate";
 
 /// `config.public_file_server.headers` in `production.rb` (`1.year`).
 const STATIC_CACHE: &str = "public, max-age=31556952";
+
+/// Largest `POST /orders` body (16 KiB); larger gets 413. A real order is a
+/// few hundred bytes. The server-wide 2 MiB read cap still applies first.
+pub const ORDER_BODY_MAX: usize = 16 * 1024;
+
+/// Process-wide `POST /orders` rate limit (10 per minute per client IP).
+static ORDER_LIMITER: LazyLock<OrderLimiter> = LazyLock::new(OrderLimiter::new);
 
 /// Create the kiosk tables and seed the menu on a new database.
 ///
@@ -108,7 +118,7 @@ fn dispatch(state: &AppState, req: &Request) -> Response {
     match (route(&path), is_read, req.method == "POST") {
         (Route::Root, true, _) => controller(state, req, || page(state, req)),
         (Route::MenuItems, true, _) => controller(state, req, || menu(state, req)),
-        (Route::Orders, _, true) => controller(state, req, || create_order(state, req)),
+        (Route::Orders, _, true) => post_orders(state, req),
         (Route::Other, true, _) if !path.starts_with("/api/") => static_file(state, &path),
         _ => error_page(state, 404),
     }
@@ -141,22 +151,52 @@ fn menu(state: &AppState, req: &Request) -> Response {
     }
 }
 
+/// `POST /orders`: the guards in front of [`create_order`].
+///
+/// Not in Rails: the 16 KiB body cap (413) and the per-IP limit (429). Then
+/// Rails' order: Rack::MethodOverride parses a form body before the
+/// controller, so a form past Rack's limits is 400 even for an old browser
+/// (406) or a foreign origin (422).
+fn post_orders(state: &AppState, req: &Request) -> Response {
+    if req.body.len() > ORDER_BODY_MAX {
+        return Response::text(413, "Payload Too Large");
+    }
+    if let Err(secs) = ORDER_LIMITER.check(&routes::client_ip(req), config::now_ms()) {
+        return Response::text(429, "Too Many Requests").set_header("Retry-After", &secs.to_string());
+    }
+    let form = match form_body(req) {
+        Ok(form) => form,
+        Err(_) => return error_page(state, 400),
+    };
+    controller(state, req, || create_order(state, req, form))
+}
+
 /// `OrdersController#create`.
 ///
 /// Rails guards this with `protect_from_forgery`, and the kiosk page never
 /// receives a CSRF token, so in Rails every POST fails with 422. Here a
 /// same-origin browser request (matching `Origin`, or `Sec-Fetch-Site:
-/// same-origin` when no `Origin` is sent) stands in for the token check;
-/// anything else gets the same 422 page Rails returns.
-fn create_order(state: &AppState, req: &Request) -> Response {
-    if !is_same_origin(req) {
+/// same-origin` when no `Origin` is sent) stands in for the token check and
+/// is saved (Steve, 2026-10-30; REPORT.md decision 1). Anything else gets
+/// Rails' 422 page, in Rails' order: a foreign `Origin` before the JSON body
+/// is read, a missing token after it (bad JSON is then 400).
+///
+/// `form` is the already-parsed form body ([`form_body`]).
+fn create_order(state: &AppState, req: &Request, form: Option<Param>) -> Response {
+    if req.header("origin").is_some() && !is_same_origin(req) {
         return error_page(state, 422);
     }
-    let body = match body_params(req) {
+    let body = match form.map_or_else(|| json_body(req), Ok) {
         Ok(p) => p,
         Err(params::InvalidJson) => return error_page(state, 400),
     };
-    let params = params::merge(body, params::parse_form(&req.query));
+    if !is_same_origin(req) {
+        return error_page(state, 422);
+    }
+    let Ok(query) = params::parse_form(&req.query) else {
+        return error_page(state, 400);
+    };
+    let params = params::merge(body, query);
     let total = params::cast_decimal(params.get("total"));
     let items = params.get("items").filter(|v| **v != Param::Null).map(params::encode_items);
     match store::create_order(&state.pool, total, items) {
@@ -175,22 +215,32 @@ fn create_order(state: &AppState, req: &Request) -> Response {
     }
 }
 
-/// Body params for JSON or form posts; anything else contributes none.
-fn body_params(req: &Request) -> Result<Param, params::InvalidJson> {
+/// A non-blank form-encoded body, parsed; `Ok(None)` for any other body.
+///
+/// # Errors
+/// [`params::FormLimit`] past Rack's depth (32) or pair (4096) limit.
+fn form_body(req: &Request) -> Result<Option<Param>, params::FormLimit> {
     let ct = req.header("content-type").unwrap_or("").to_ascii_lowercase();
-    if req.body.iter().all(u8::is_ascii_whitespace) {
+    if !ct.starts_with("application/x-www-form-urlencoded") || is_blank(&req.body) {
+        return Ok(None);
+    }
+    params::parse_form(&String::from_utf8_lossy(&req.body)).map(Some)
+}
+
+/// Body params for a JSON post; any other body contributes none.
+fn json_body(req: &Request) -> Result<Param, params::InvalidJson> {
+    let ct = req.header("content-type").unwrap_or("").to_ascii_lowercase();
+    if !ct.starts_with("application/json") || is_blank(&req.body) {
         return Ok(Param::Obj(Vec::new()));
     }
-    if ct.starts_with("application/json") {
-        return Ok(match params::parse_json(&req.body)? {
-            obj @ Param::Obj(_) => obj,
-            _ => Param::Obj(Vec::new()),
-        });
-    }
-    if ct.starts_with("application/x-www-form-urlencoded") {
-        return Ok(params::parse_form(&String::from_utf8_lossy(&req.body)));
-    }
-    Ok(Param::Obj(Vec::new()))
+    Ok(match params::parse_json(&req.body)? {
+        obj @ Param::Obj(_) => obj,
+        _ => Param::Obj(Vec::new()),
+    })
+}
+
+fn is_blank(body: &[u8]) -> bool {
+    body.iter().all(u8::is_ascii_whitespace)
 }
 
 /// Same-origin check that stands in for Rails' CSRF token (see [`create_order`]).

@@ -1384,7 +1384,7 @@ pub fn run_lockout_cleanup(state: &AppState) {
     }
 }
 
-/// Client IP used for auth rate limiting and lockout keys.
+/// Client IP used for auth rate limiting, lockout keys and the kiosk `POST /orders` limit.
 ///
 /// Transport `peer_ip` by default. `TRUST_PROXY` is the number of reverse
 /// proxies in front of this process (`TRUST_PROXY=1` for a single proxy such as
@@ -1398,7 +1398,7 @@ pub fn run_lockout_cleanup(state: &AppState) {
 /// Falls back to `peer_ip` when the header is absent or carries fewer entries
 /// than `hops` (a spoofed-short chain then shares the proxy's bucket rather
 /// than escaping into one of its own).
-fn client_ip(req: &Request) -> String {
+pub(crate) fn client_ip(req: &Request) -> String {
     let hops = config::env("TRUST_PROXY")
         .and_then(|v| v.trim().parse::<usize>().ok())
         .unwrap_or(0);
