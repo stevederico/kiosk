@@ -1,5 +1,16 @@
 # Changelog
 
+0.7.0
+
+  Cap param depth
+  Order rate limit
+  Order body cap
+  Split params module
+  Older base images
+  Clippy clean
+  Cargo fmt
+  Restricted key placeholders
+
 0.6.0
 
   Skateboard 5.13.0

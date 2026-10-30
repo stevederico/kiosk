@@ -28,7 +28,7 @@ cd backend && cargo build --release --locked
 |---|---|
 | `GET /` | Kiosk page (also `/kiosk.html`, `/kiosk`) |
 | `GET /menu_items(.:format)` | `MenuItem.all` as Rails JSON (price as decimal string, ISO ms timestamps, `&` escaping) |
-| `POST /orders(.:format)` | Creates an order: 201 `{"message":"Order created successfully","order_id":N}`. Same-origin browser requests only; others get Rails' 422 page (see REPORT.md) |
+| `POST /orders(.:format)` | Creates an order: 201 `{"message":"Order created successfully","order_id":N}`. Same-origin browser requests only; others get Rails' 422 page. Body over 16 KiB: 413. More than 10 per minute from one IP: 429. A form key nested past 32 levels or over 4096 pairs: 400, like Rack (see REPORT.md) |
 | `public/` files | `icon.png`, `icon.svg`, `images/frankie-logo.png`, `robots.txt`, `400/404/406/422/500.html` |
 | anything else | 404 with Rails' `404.html` (including `/up`, which Rails never routed) |
 | `GET /api/health` | Skateboard health check for the container (new; Rails had none) |
@@ -53,7 +53,8 @@ Code: `backend/src/kiosk/` (routes, schema/seeds, Rails encodings, browser check
 | `JWT_SECRET` | yes in production | Skateboard refuses to start without a 32+ char value. The kiosk issues no tokens; any random value works (`openssl rand -base64 48`) |
 | `PORT` | no (default 8000) | Listen port |
 | `STRIPE_KEY`, `STRIPE_ENDPOINT_SECRET` | no | Unused; the server logs a warning when unset |
-| `CORS_ORIGINS`, `FRONTEND_URL`, `TRUST_PROXY`, `LIBSQL_URL`, `FREE_USAGE_LIMIT`, `APP_NAME` | no | Template options, unused by the kiosk |
+| `TRUST_PROXY` | behind a proxy | Number of trusted reverse proxies in front of the app. The `POST /orders` limit (10 per minute) keys on the client IP taken that many hops from the right of `X-Forwarded-For`; unset, every client behind the proxy shares the proxy's one bucket. Set it to the real hop count before cutover (REPORT.md) |
+| `CORS_ORIGINS`, `FRONTEND_URL`, `LIBSQL_URL`, `FREE_USAGE_LIMIT`, `APP_NAME` | no | Template options, unused by the kiosk |
 | `SKATEBOARD_BACKEND_DIR` | set by the image | Where `config.json` lives |
 
 ## Docker

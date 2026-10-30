@@ -1,6 +1,11 @@
-# Base images are pinned by digest (tag kept for readability). Refresh with
-# `docker pull <tag>` + `docker image inspect <tag> --format '{{index .RepoDigests 0}}'`.
-FROM node:24.22.2-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS frontend
+# Base images are pinned by multi-arch index digest (tag kept for
+# readability). Each digest must have been first published on Docker Hub at
+# least 7 days before it is pinned (supply-chain rule; see REPORT.md
+# "Base images" for how the dates were checked). Look up a candidate with
+# hub.docker.com/v2/repositories/library/<repo>/tags (`digest`,
+# `tag_last_pushed`) and docker-library/repo-info history, never `docker pull`
+# of a floating tag.
+FROM node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4 AS frontend
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -13,7 +18,7 @@ RUN if find /app \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -pr
     fi
 RUN npm run build
 
-FROM rust:1.99.1-bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b AS backend
+FROM rust:1.99.1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS backend
 
 # Use the image's pinned toolchain; rust-toolchain.toml says "stable", which
 # would otherwise make rustup download whatever stable is current.
@@ -26,7 +31,7 @@ COPY backend/rust-toolchain.toml backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 RUN cargo build --release --locked
 
-FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
+FROM debian:bookworm-20261020-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libsqlite3-0 libcurl4 ca-certificates curl \

@@ -8,7 +8,7 @@ This file is the source of truth; `CLAUDE.md` is a symlink to it.
 Rewrite of the Rails kiosk (`~/Projects/kiosk`, read-only reference) on skateboard 5.13.0 (skateboard-ui 5.11.0). Parity with the Rails app is the spec: [PARITY.md](PARITY.md), results in [REPORT.md](REPORT.md).
 
 - Backend entry: `backend/src/main.rs` calls `kiosk::prepare` (schema + seed) and serves `kiosk::handle`
-- `backend/src/kiosk/`: `mod.rs` routes, `store.rs` schema/seeds/queries, `encode.rs` Rails JSON/time/decimal formats, `params.rs` Rails params, `browser.rs` `allow_browser :modern`, `tests.rs` route tests
+- `backend/src/kiosk/`: `mod.rs` routes, `store.rs` schema/seeds/queries, `encode.rs` Rails JSON/time/decimal formats, `params/` Rails params (`json.rs`, `form.rs` with Rack's 32-level / 4096-pair limits, `cast.rs`), `limit.rs` `POST /orders` per-IP limit, `browser.rs` `allow_browser :modern`, `tests.rs` route tests
 - Template routes (`backend/src/routes.rs`) stay vendored and tested; only `/api/health` and CORS preflights reach them. Keep it that way so `scripts/update-skateboard.js` can still merge template updates
 - Front end: `src/components/KioskView.tsx` (page), `src/lib/cart.ts` + `src/lib/menu.ts` (logic, `node --test`)
 - Byte formats (price strings, `&` as `\u0026`, timestamps, 404/406/422 pages) were captured from Rails 8.0.2. Change them only with a new capture

@@ -950,7 +950,7 @@ NODE_ENV=production
 PORT=8000
 
 ## Required for all environments
-STRIPE_KEY=sk_live_your_stripe_key
+STRIPE_KEY=rk_live_your_stripe_restricted_key
 STRIPE_ENDPOINT_SECRET=whsec_your_webhook_secret
 JWT_SECRET=your_secure_jwt_secret
 
@@ -1658,7 +1658,7 @@ All platforms require these environment variables:
 ```bash
 ## Required
 JWT_SECRET=your_super_secure_jwt_secret_here
-STRIPE_KEY=sk_test_your_stripe_secret_key
+STRIPE_KEY=rk_test_your_stripe_restricted_key
 STRIPE_ENDPOINT_SECRET=whsec_your_webhook_secret
 CORS_ORIGINS=https://yourapp.com
 FRONTEND_URL=https://yourapp.com
@@ -1811,7 +1811,7 @@ See [Production Configuration](#production-configuration) above for environment 
 - [ ] `constants.json` backendURL updated
 - [ ] `config.json` client URL updated
 - [ ] Stripe webhook configured with production URL
-- [ ] Live Stripe keys configured (`sk_live_...`)
+- [ ] Live Stripe restricted keys configured (`rk_live_...`)
 - [ ] Test sign up / sign in flow
 - [ ] Test payment flow
 - [ ] Monitor logs for errors
