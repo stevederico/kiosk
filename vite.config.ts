@@ -1,13 +1,7 @@
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
-import {
-  customLoggerPlugin,
-  htmlReplacePlugin,
-  dynamicRobotsPlugin,
-  dynamicSitemapPlugin,
-  dynamicManifestPlugin
-} from './vite.plugins.ts';
+import { customLoggerPlugin, htmlReplacePlugin } from './vite.plugins.ts';
 
 // ===== VITE CONFIGURATION =====
 
@@ -15,10 +9,9 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     customLoggerPlugin(),
-    htmlReplacePlugin(),
-    dynamicRobotsPlugin(),
-    dynamicSitemapPlugin(),
-    dynamicManifestPlugin()
+    // No generated robots.txt, sitemap.xml or manifest.json: the kiosk ships the
+    // Rails app's public/robots.txt, and the Rails app served no manifest/sitemap.
+    htmlReplacePlugin()
   ],
   // JSX comes from tsconfig ("jsx": "react-jsx") via Vite's own transform — no
   // @vitejs/plugin-react-swc, so edits trigger a full reload instead of Fast Refresh.
@@ -42,6 +35,12 @@ export default defineConfig({
     open: false,
     port: 5173,
     strictPort: false,
+    // The kiosk API lives at the Rails paths, not under /api: forward them to
+    // the Rust backend (`cd backend && cargo run`) in development.
+    proxy: {
+      '/menu_items': 'http://localhost:8000',
+      '/orders': 'http://localhost:8000'
+    },
     // HMR is left at its defaults on purpose: the error overlay surfaces build failures
     // instead of hiding them, and pinning the HMR port broke reloads ("WebSocket closed
     // without opened") whenever 5173 was taken and the server fell back to 5174.

@@ -1,5 +1,5 @@
 {
-    "version": "0.1.0",
+    "version": "0.5.0",
     "design": {
         "baseColor": "neutral",
         "radius": "medium",
@@ -7,70 +7,27 @@
         "iconLibrary": "lucide"
     },
     "appName": "Kiosk",
-    "appIcon": "command",
-    "tagline": "Food Court Kiosk",
+    "appIcon": "utensils",
+    "tagline": "Frankie Food Court Kiosk",
     "cta": "Get Started",
     "ctaHeading": "Ready to Get Started?",
-    "noLogin": false,
-    "authOverlay": true,
+    "noLogin": true,
+    "authOverlay": false,
     "sidebarCollapsed": false,
     "features": {
-        "title": "Everything You Need",
+        "title": "Food Court Kiosk",
         "items": [
             {
-                "icon": "lock",
-                "title": "Authentication",
-                "description": "Complete user management with JWT tokens and secure sessions"
-            },
-            {
-                "icon": "credit-card",
-                "title": "Stripe Payments",
-                "description": "Ready-to-use checkout flows and subscription management"
-            },
-            {
-                "icon": "palette",
-                "title": "Beautiful UI",
-                "description": "50+ Shadcn components with dark mode support"
+                "icon": "utensils",
+                "title": "Self-Service Ordering",
+                "description": "Tap items to build an order, then pay at the PIN pad"
             }
         ]
     },
     "backendURL": "/api",
     "devBackendURL": "http://localhost:8000/api",
-    "pages": [
-        {
-            "title": "Dashboard",
-            "url": "home",
-            "icon": "layout-dashboard"
-        },
-        {
-            "title": "Analytics",
-            "url": "analytics",
-            "icon": "chart-bar"
-        },
-        {
-            "title": "Projects",
-            "url": "projects",
-            "icon": "folder"
-        },
-        {
-            "title": "Team",
-            "url": "team",
-            "icon": "users"
-        }
-    ],
-    "stripeProducts": [
-        {
-            "price": "$5.00",
-            "title": "Unlimited",
-            "interval": "month",
-            "lookup_key": "my_lookup_key",
-            "features": [
-                "Unlimited Todos",
-                "Unlimited Messages",
-                "All Premium Features"
-            ]
-        }
-    ],
+    "pages": [],
+    "stripeProducts": [],
     "pricing": {
         "title": "Simple, Transparent Pricing",
         "extras": [
@@ -78,16 +35,7 @@
             "Cancel Anytime"
         ]
     },
-    "navLinks": [
-        {
-            "label": "Features",
-            "href": "#features"
-        },
-        {
-            "label": "Pricing",
-            "href": "#pricing"
-        }
-    ],
+    "navLinks": [],
     "footerLinks": [
         {
             "label": "Privacy",
@@ -103,8 +51,8 @@
         }
     ],
     "copyrightText": "All rights reserved.",
-    "companyName": "Your Company",
-    "companyWebsite": "company.com",
+    "companyName": "Bixby Apps",
+    "companyWebsite": "kiosk.bixbyapps.com",
     "companyEmail": "support@company.com",
     "hasTermsOfService": true,
     "hasPrivacyPolicy": true,
