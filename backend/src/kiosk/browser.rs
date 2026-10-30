@@ -39,7 +39,9 @@ pub fn is_blocked(user_agent: Option<&str>) -> bool {
 /// The gem's bot test: crawler-ish words anywhere in the agent.
 fn is_bot(ua: &str) -> bool {
     let lower = ua.to_ascii_lowercase();
-    ["bot", "crawl", "spider", "slurp"].iter().any(|w| lower.contains(w))
+    ["bot", "crawl", "spider", "slurp"]
+        .iter()
+        .any(|w| lower.contains(w))
 }
 
 /// Version after `token` (`"Chrome/"`), only where the token starts a word, so
@@ -103,7 +105,9 @@ fn safari_version(ua: &str) -> String {
     if ua.contains("iPhone") || ua.contains("iPad") || ua.contains("iPod") {
         if let Some(at) = ua.find(" OS ") {
             let rest = &ua[at + 4..];
-            let end = rest.find(|c: char| !(c.is_ascii_digit() || c == '_')).unwrap_or(rest.len());
+            let end = rest
+                .find(|c: char| !(c.is_ascii_digit() || c == '_'))
+                .unwrap_or(rest.len());
             return rest[..end].replace('_', ".");
         }
     }
@@ -114,13 +118,20 @@ fn safari_version(ua: &str) -> String {
 fn version_lt(have: &str, min: &str) -> bool {
     let parts = |s: &str| -> Vec<u64> {
         s.split('.')
-            .map(|p| p.chars().take_while(char::is_ascii_digit).collect::<String>())
+            .map(|p| {
+                p.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+            })
             .map(|p| p.parse().unwrap_or(0))
             .collect()
     };
     let (a, b) = (parts(have), parts(min));
     for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         if x != y {
             return x < y;
         }

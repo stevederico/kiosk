@@ -16,7 +16,11 @@ pub struct InvalidJson;
 /// `ActionDispatch::Http::Parameters::ParseError`.
 pub fn parse_json(input: &[u8]) -> Result<Param, InvalidJson> {
     let text = std::str::from_utf8(input).map_err(|_| InvalidJson)?;
-    let mut p = JsonParser { s: text.as_bytes(), i: 0, depth: 0 };
+    let mut p = JsonParser {
+        s: text.as_bytes(),
+        i: 0,
+        depth: 0,
+    };
     p.ws();
     let v = p.value().map_err(|()| InvalidJson)?;
     p.ws();
@@ -270,7 +274,10 @@ mod tests {
 
     #[test]
     fn json_decodes_surrogate_pair() {
-        assert_eq!(parse_json(b"\"\\ud83c\\udf2d\""), Ok(Param::Str("\u{1f32d}".to_string())));
+        assert_eq!(
+            parse_json(b"\"\\ud83c\\udf2d\""),
+            Ok(Param::Str("\u{1f32d}".to_string()))
+        );
     }
 
     #[test]

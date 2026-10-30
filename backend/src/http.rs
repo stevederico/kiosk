@@ -465,7 +465,9 @@ impl Default for Config {
     /// socket timeouts, 15s per-request wall clock, 30s keep-alive idle, 2 MiB
     /// body cap, 32 KiB header cap, and an intake queue eight deep per worker.
     fn default() -> Self {
-        let cores = thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
+        let cores = thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2);
         let threads = (cores * 4).max(8);
         Config {
             port: 8000,
@@ -1511,7 +1513,11 @@ mod tests {
             let mut line = String::new();
             let n = r.read_line(&mut line).ok()?;
             if n == 0 {
-                return if head.is_empty() { None } else { Some((head, Vec::new())) };
+                return if head.is_empty() {
+                    None
+                } else {
+                    Some((head, Vec::new()))
+                };
             }
             if line == "\r\n" {
                 break;
@@ -1562,12 +1568,14 @@ mod tests {
         let mut w = c.try_clone().unwrap();
         let mut r = StdBufReader::new(c);
 
-        w.write_all(b"GET /one HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        w.write_all(b"GET /one HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let (h1, b1) = read_one(&mut r).unwrap();
         assert!(h1.contains("Connection: keep-alive"), "{h1}");
         assert_eq!(b1, b"GET /one");
 
-        w.write_all(b"GET /two HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        w.write_all(b"GET /two HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let (_, b2) = read_one(&mut r).unwrap();
         assert_eq!(b2, b"GET /two");
         s.shutdown(Duration::from_secs(2));
@@ -1718,7 +1726,8 @@ mod tests {
         cfg.read_timeout = Duration::from_secs(2);
         let s = serve(cfg, ok_handler).expect("bind");
         let mut c = connect(&s);
-        c.write_all(b"GET /p HTTP/1.1\r\nHost: x\r\nX-Slow: ").unwrap();
+        c.write_all(b"GET /p HTTP/1.1\r\nHost: x\r\nX-Slow: ")
+            .unwrap();
         c.flush().unwrap();
         thread::sleep(Duration::from_millis(250));
         let _ = c.write_all(b"v\r\n\r\n");
@@ -1743,7 +1752,8 @@ mod tests {
         let mut w = c.try_clone().unwrap();
         let mut r = StdBufReader::new(c);
 
-        w.write_all(b"GET /boom HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        w.write_all(b"GET /boom HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
         let (h1, _) = read_one(&mut r).unwrap();
         assert!(h1.starts_with("HTTP/1.1 500 Internal Server Error"), "{h1}");
 
@@ -1831,7 +1841,10 @@ mod tests {
         s.wait();
         let t0 = std::time::Instant::now();
         s.shutdown(Duration::from_secs(2));
-        assert!(t0.elapsed() < Duration::from_secs(3), "shutdown overran grace");
+        assert!(
+            t0.elapsed() < Duration::from_secs(3),
+            "shutdown overran grace"
+        );
     }
 
     #[test]
@@ -1952,7 +1965,10 @@ mod tests {
     #[test]
     fn content_type_falls_back_to_octet_stream() {
         assert_eq!(content_type(Path::new("a.woff2")), "font/woff2");
-        assert_eq!(content_type(Path::new("a.WEBMANIFEST")), "application/manifest+json");
+        assert_eq!(
+            content_type(Path::new("a.WEBMANIFEST")),
+            "application/manifest+json"
+        );
         assert_eq!(content_type(Path::new("a.bin")), "application/octet-stream");
         assert_eq!(content_type(Path::new("noext")), "application/octet-stream");
     }

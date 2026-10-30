@@ -38,7 +38,9 @@ fn dispatch(state: &AppState, req: &Request) -> Response {
     match (req.method.as_str(), req.path.as_str()) {
         ("POST", "/api/payment") => payment(state, req),
         ("GET", "/api/health") => health(state),
-        ("GET", "/api/__integration_error_test__") if config::env("NODE_ENV").as_deref() == Some("test") => {
+        ("GET", "/api/__integration_error_test__")
+            if config::env("NODE_ENV").as_deref() == Some("test") =>
+        {
             unhandled(state, req, "Intentional integration test error")
         }
         ("POST", "/api/signup") => signup(state, req),
@@ -61,16 +63,20 @@ fn health(state: &AppState) -> Response {
     let (status, database) = match state.pool.ping() {
         Ok(()) => (200, "connected"),
         Err(e) => {
-            state
-                .log
-                .error("Health check database probe failed", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Health check database probe failed",
+                &[("error", json::s(e.to_string()))],
+            );
             (503, "unavailable")
         }
     };
     json_res(
         status,
         &json::obj([
-            ("status", json::s(if status == 200 { "ok" } else { "degraded" })),
+            (
+                "status",
+                json::s(if status == 200 { "ok" } else { "degraded" }),
+            ),
             ("database", json::s(database)),
             ("timestamp", json::i(config::now_ms())),
         ]),
@@ -182,7 +188,10 @@ fn generate_token(state: &AppState, user_id: &str) -> Result<String, Response> {
     let Some(secret) = state.jwt_secret.as_deref() else {
         state.log.error(
             "Token generation error",
-            &[("error", json::s("JWT_SECRET not configured - authentication disabled"))],
+            &[(
+                "error",
+                json::s("JWT_SECRET not configured - authentication disabled"),
+            )],
         );
         return Err(err_json(500, "Server error"));
     };
@@ -271,7 +280,9 @@ fn require_csrf(state: &AppState, req: &Request, user_id: &str) -> Result<(), Re
             return Err(csrf_retry(state, user_id, "CSRF token expired"));
         }
     }
-    state.log.debug("CSRF validation passed", &[("userID", json::s(user_id))]);
+    state
+        .log
+        .debug("CSRF validation passed", &[("userID", json::s(user_id))]);
     Ok(())
 }
 
@@ -321,9 +332,16 @@ fn delete_csrf_cookie(state: &AppState) -> Cookie {
     c
 }
 
-fn set_auth_cookies(state: &AppState, res: Response, user_id: &str, jwt: &str) -> Result<Response, Response> {
+fn set_auth_cookies(
+    state: &AppState,
+    res: Response,
+    user_id: &str,
+    jwt: &str,
+) -> Result<Response, Response> {
     let csrf = generate_csrf_token(state, user_id)?;
-    Ok(res.cookie(&token_cookie(state, jwt)).cookie(&csrf_cookie(state, &csrf)))
+    Ok(res
+        .cookie(&token_cookie(state, jwt))
+        .cookie(&csrf_cookie(state, &csrf)))
 }
 
 fn user_json(u: &User) -> Json {
@@ -397,7 +415,9 @@ fn signup(state: &AppState, req: &Request) -> Response {
     let hash = match kdf::hash_password(password) {
         Ok(h) => h,
         Err(e) => {
-            state.log.error("Signup error", &[("error", json::s(e.to_string()))]);
+            state
+                .log
+                .error("Signup error", &[("error", json::s(e.to_string()))]);
             return err_json(500, "Server error");
         }
     };
@@ -436,7 +456,10 @@ fn signup(state: &AppState, req: &Request) -> Response {
         ("id", json::s(insert_id.clone())),
         ("email", json::s(email)),
         ("name", json::s(name.trim())),
-        ("tokenExpires", json::i(auth::token_expire_timestamp(TOKEN_EXPIRATION_DAYS))),
+        (
+            "tokenExpires",
+            json::i(auth::token_expire_timestamp(TOKEN_EXPIRATION_DAYS)),
+        ),
     ]);
     match set_auth_cookies(state, json_res(201, &body), &insert_id, &token) {
         Ok(res) => {
@@ -471,7 +494,10 @@ fn signin(state: &AppState, req: &Request) -> Response {
     let lock = state.lockout.is_locked(&email, &ip, config::now_ms());
     if lock.locked {
         let body = json::obj([
-            ("error", json::s("Account temporarily locked. Try again later.")),
+            (
+                "error",
+                json::s("Account temporarily locked. Try again later."),
+            ),
             ("retryAfter", json::i(lock.remaining_time)),
         ]);
         return json_res(429, &body).header("Retry-After", &lock.remaining_time.to_string());
@@ -495,16 +521,18 @@ fn signin(state: &AppState, req: &Request) -> Response {
         match kdf::hash_password(password) {
             Ok(new_hash) => {
                 if let Err(e) = state.pool.update_auth_password(&email, &new_hash) {
-                    state
-                        .log
-                        .warn("Password rehash failed", &[("error", json::s(e.to_string()))]);
+                    state.log.warn(
+                        "Password rehash failed",
+                        &[("error", json::s(e.to_string()))],
+                    );
                 } else {
                     state.log.debug("Password hash migrated to scrypt", &[]);
                 }
             }
-            Err(e) => state
-                .log
-                .warn("Password rehash failed", &[("error", json::s(e.to_string()))]),
+            Err(e) => state.log.warn(
+                "Password rehash failed",
+                &[("error", json::s(e.to_string()))],
+            ),
         }
     }
     let user = match state.pool.find_user(&UserQuery::Email(email.clone())) {
@@ -559,9 +587,12 @@ fn signout(state: &AppState, req: &Request) -> Response {
         return res;
     }
     state.log.info("Signout success", &[]);
-    json_res(200, &json::obj([("message", json::s("Signed out successfully"))]))
-        .cookie(&delete_token_cookie(state))
-        .cookie(&delete_csrf_cookie(state))
+    json_res(
+        200,
+        &json::obj([("message", json::s("Signed out successfully"))]),
+    )
+    .cookie(&delete_token_cookie(state))
+    .cookie(&delete_csrf_cookie(state))
 }
 
 fn me_get(state: &AppState, req: &Request) -> Response {
@@ -795,13 +826,15 @@ fn checkout(state: &AppState, req: &Request) -> Response {
     let body = match json::parse(&req.body) {
         Ok(v) => v,
         Err(e) => {
-            state
-                .log
-                .error("Checkout session error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Checkout session error",
+                &[("error", json::s(e.to_string()))],
+            );
             return err_json(500, "Stripe session failed");
         }
     };
-    let (Some(email), Some(lookup_key)) = (body.get_str("email"), body.get_str("lookup_key")) else {
+    let (Some(email), Some(lookup_key)) = (body.get_str("email"), body.get_str("lookup_key"))
+    else {
         return err_json(400, "Missing email or lookup_key");
     };
     if !state
@@ -814,9 +847,10 @@ fn checkout(state: &AppState, req: &Request) -> Response {
     let user = match state.pool.find_user(&UserQuery::Id(user_id)) {
         Ok(u) => u,
         Err(e) => {
-            state
-                .log
-                .error("Checkout session error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Checkout session error",
+                &[("error", json::s(e.to_string()))],
+            );
             return err_json(500, "Stripe session failed");
         }
     };
@@ -825,9 +859,7 @@ fn checkout(state: &AppState, req: &Request) -> Response {
     }
     let price_id = match stripe.price_id_for_lookup_key(lookup_key) {
         Ok(Some(id)) => id,
-        Ok(None) => {
-            return err_json(400, &format!("No price found for lookup_key: {lookup_key}"))
-        }
+        Ok(None) => return err_json(400, &format!("No price found for lookup_key: {lookup_key}")),
         Err(e) => return stripe_err(state, "Checkout session error", e),
     };
     let origin = state.redirect_origin(req.header("origin"));
@@ -899,8 +931,7 @@ fn portal(state: &AppState, req: &Request) -> Response {
         .and_then(|u| u.subscription.as_ref())
         .map(|s| s.stripe_id.as_str())
         .filter(|id| !id.is_empty());
-    let authorized = stored_id
-        .is_some_and(|id| ct_eq(id.as_bytes(), customer_id.as_bytes()));
+    let authorized = stored_id.is_some_and(|id| ct_eq(id.as_bytes(), customer_id.as_bytes()));
     if !authorized {
         state.log.warn(
             "Portal denied - customerID does not match the caller's subscription",
@@ -967,15 +998,17 @@ fn apply_sub_patch(state: &AppState, email: &str, sub: &Subscription) -> Result<
     let user = match state.pool.find_user(&UserQuery::Email(email.to_string())) {
         Ok(Some(u)) => u,
         Ok(None) => {
-            state
-                .log
-                .warn("Webhook: No user found for email", &[("email", json::s(redact_email(email)))]);
+            state.log.warn(
+                "Webhook: No user found for email",
+                &[("email", json::s(redact_email(email)))],
+            );
             return Ok(false);
         }
         Err(e) => {
-            state
-                .log
-                .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Webhook processing error",
+                &[("error", json::s(e.to_string()))],
+            );
             return Err(());
         }
     };
@@ -983,7 +1016,10 @@ fn apply_sub_patch(state: &AppState, email: &str, sub: &Subscription) -> Result<
         state.log.info(
             "Webhook: event is for a superseded subscription, ignoring",
             &[
-                ("subscription", json::s(sub.subscription_id.clone().unwrap_or_default())),
+                (
+                    "subscription",
+                    json::s(sub.subscription_id.clone().unwrap_or_default()),
+                ),
                 ("status", json::s(sub.status.clone())),
             ],
         );
@@ -992,9 +1028,10 @@ fn apply_sub_patch(state: &AppState, email: &str, sub: &Subscription) -> Result<
     match state.pool.update_user_subscription(&user.id, sub) {
         Ok(_) => Ok(true),
         Err(e) => {
-            state
-                .log
-                .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Webhook processing error",
+                &[("error", json::s(e.to_string()))],
+            );
             Err(())
         }
     }
@@ -1055,7 +1092,10 @@ fn payment(state: &AppState, req: &Request) -> Response {
     };
     state.log.debug(
         "Webhook event received",
-        &[("type", json::s(event.get_str("type").unwrap_or("").to_string()))],
+        &[(
+            "type",
+            json::s(event.get_str("type").unwrap_or("").to_string()),
+        )],
     );
     let Some(event_id) = event.get_str("id").map(str::to_string) else {
         return Response::empty(400);
@@ -1071,9 +1111,10 @@ fn payment(state: &AppState, req: &Request) -> Response {
         }
         Ok(None) => {}
         Err(e) => {
-            state
-                .log
-                .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Webhook processing error",
+                &[("error", json::s(e.to_string()))],
+            );
             return Response::empty(500);
         }
     }
@@ -1130,24 +1171,27 @@ fn process_webhook(
         // (status incomplete) landing after checkout would demote a paying
         // user. Read the subscription as it is now, like the other branches.
         let (Some(stripe), Some(subscription_id)) = (stripe, obj.get_str("id")) else {
-            state
-                .log
-                .error("Webhook missing subscription ID", &[("type", json::s(event_type))]);
+            state.log.error(
+                "Webhook missing subscription ID",
+                &[("type", json::s(event_type))],
+            );
             return Err(Response::empty(400));
         };
         let sub_json = match stripe.retrieve_subscription(subscription_id) {
             Ok(v) => v,
             Err(e) => {
-                state
-                    .log
-                    .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+                state.log.error(
+                    "Webhook processing error",
+                    &[("error", json::s(e.to_string()))],
+                );
                 return Err(Response::empty(500));
             }
         };
         let Some(stripe_id) = obj.get_str("customer") else {
-            state
-                .log
-                .error("Webhook missing customer ID", &[("type", json::s(event_type))]);
+            state.log.error(
+                "Webhook missing customer ID",
+                &[("type", json::s(event_type))],
+            );
             return Err(Response::empty(400));
         };
         let email = match resolve_customer_email(state, stripe_id) {
@@ -1185,9 +1229,10 @@ fn process_webhook(
             let sub_json = match stripe.retrieve_subscription(subscription_id) {
                 Ok(v) => v,
                 Err(e) => {
-                    state
-                        .log
-                        .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+                    state.log.error(
+                        "Webhook processing error",
+                        &[("error", json::s(e.to_string()))],
+                    );
                     return Err(Response::empty(500));
                 }
             };
@@ -1225,9 +1270,10 @@ fn process_webhook(
             let sub_json = match stripe.retrieve_subscription(subscription_id) {
                 Ok(v) => v,
                 Err(e) => {
-                    state
-                        .log
-                        .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+                    state.log.error(
+                        "Webhook processing error",
+                        &[("error", json::s(e.to_string()))],
+                    );
                     return Err(Response::empty(500));
                 }
             };
@@ -1238,7 +1284,9 @@ fn process_webhook(
             };
             let patch = build_sub_patch(stripe_id, &sub_json);
             if apply_sub_patch(state, &email, &patch).map_err(|()| Response::empty(500))? {
-                state.log.info("Invoice paid", &[("email", json::s(redact_email(&email)))]);
+                state
+                    .log
+                    .info("Invoice paid", &[("email", json::s(redact_email(&email)))]);
             }
         }
     }
@@ -1250,9 +1298,10 @@ fn process_webhook(
                 // exists. Add columns if billing UX needs the flag.
                 match state.pool.find_user(&UserQuery::Email(email.clone())) {
                     Ok(Some(_)) => {
-                        state
-                            .log
-                            .warn("Invoice payment failed", &[("email", json::s(redact_email(&email)))]);
+                        state.log.warn(
+                            "Invoice payment failed",
+                            &[("email", json::s(redact_email(&email)))],
+                        );
                     }
                     Ok(None) => {
                         state.log.warn(
@@ -1276,23 +1325,26 @@ fn process_webhook(
 
 fn resolve_customer_email(state: &AppState, stripe_id: &str) -> Result<Option<String>, ()> {
     let Some(stripe) = state.stripe.as_ref() else {
-        state
-            .log
-            .warn("Webhook: Stripe not configured", &[("stripeID", json::s(stripe_id))]);
+        state.log.warn(
+            "Webhook: Stripe not configured",
+            &[("stripeID", json::s(stripe_id))],
+        );
         return Ok(None);
     };
     match stripe.customer_email(stripe_id) {
         Ok(Some(e)) => Ok(Some(e)),
         Ok(None) => {
-            state
-                .log
-                .warn("Webhook: Customer has no email", &[("stripeID", json::s(stripe_id))]);
+            state.log.warn(
+                "Webhook: Customer has no email",
+                &[("stripeID", json::s(stripe_id))],
+            );
             Ok(None)
         }
         Err(e) => {
-            state
-                .log
-                .error("Webhook processing error", &[("error", json::s(e.to_string()))]);
+            state.log.error(
+                "Webhook processing error",
+                &[("error", json::s(e.to_string()))],
+            );
             Err(())
         }
     }
@@ -1302,7 +1354,9 @@ fn has_extension(path: &str) -> bool {
     path.rsplit('/')
         .next()
         .and_then(|s| s.rsplit_once('.'))
-        .map(|(_, ext)| !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .map(|(_, ext)| {
+            !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
         .unwrap_or(false)
 }
 
@@ -1349,13 +1403,15 @@ const WEBHOOK_RETENTION_DAYS: i64 = 30;
 pub fn run_webhook_cleanup(state: &AppState) {
     let cutoff = config::now_ms() - WEBHOOK_RETENTION_DAYS * 24 * 60 * 60 * 1000;
     match state.pool.prune_webhook_events(cutoff) {
-        Ok(removed) if removed > 0 => state
-            .log
-            .debug("Webhook cleanup completed", &[("removedEvents", json::i(removed))]),
+        Ok(removed) if removed > 0 => state.log.debug(
+            "Webhook cleanup completed",
+            &[("removedEvents", json::i(removed))],
+        ),
         Ok(_) => {}
-        Err(e) => state
-            .log
-            .error("Webhook cleanup failed", &[("error", json::s(e.to_string()))]),
+        Err(e) => state.log.error(
+            "Webhook cleanup failed",
+            &[("error", json::s(e.to_string()))],
+        ),
     }
 }
 
@@ -1419,7 +1475,10 @@ fn enforce_auth_rate_limit(state: &AppState, req: &Request) -> Result<(), Respon
         return Ok(());
     }
     let body = json::obj([
-        ("error", json::s("Too many authentication attempts. Try again later.")),
+        (
+            "error",
+            json::s("Too many authentication attempts. Try again later."),
+        ),
         ("retryAfter", json::i(status.retry_after_secs)),
     ]);
     Err(json_res(429, &body).header("Retry-After", &status.retry_after_secs.to_string()))
@@ -1478,10 +1537,18 @@ mod tests {
         if !cookies.is_empty() {
             req.set_test_header("cookie", &cookies.join("; "));
         }
-        if let Some((_, csrf)) = res.headers.iter().find(|(k, v)| {
-            k.eq_ignore_ascii_case("Set-Cookie") && v.starts_with("csrf_token=")
-        }) {
-            let token = csrf.split('=').nth(1).unwrap_or("").split(';').next().unwrap_or("");
+        if let Some((_, csrf)) = res
+            .headers
+            .iter()
+            .find(|(k, v)| k.eq_ignore_ascii_case("Set-Cookie") && v.starts_with("csrf_token="))
+        {
+            let token = csrf
+                .split('=')
+                .nth(1)
+                .unwrap_or("")
+                .split(';')
+                .next()
+                .unwrap_or("");
             req.set_test_header("x-csrf-token", token);
         }
     }
@@ -1509,8 +1576,7 @@ mod tests {
             }
         }
         if !jar.is_empty() {
-            let serialized: Vec<String> =
-                jar.iter().map(|(n, v)| format!("{n}={v}")).collect();
+            let serialized: Vec<String> = jar.iter().map(|(n, v)| format!("{n}={v}")).collect();
             req.set_test_header("cookie", &serialized.join("; "));
         }
         if send_csrf {
@@ -1538,7 +1604,10 @@ mod tests {
         req.set_test_body(br#"{"email":"nope","password":"secret1","name":"Ada"}"#.to_vec());
         let res = handle(&state, req);
         assert_eq!(res.status, 400);
-        assert_eq!(json_body(&res).get_str("error"), Some("Invalid email format or length"));
+        assert_eq!(
+            json_body(&res).get_str("error"),
+            Some("Invalid email format or length")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1546,7 +1615,9 @@ mod tests {
     fn signup_signin_me_round_trip() {
         let (state, dir) = test_state();
         let mut req = Request::for_test("POST", "/api/signup");
-        req.set_test_body(br#"{"email":"Ada@Example.COM","password":"secret1","name":"Ada"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"Ada@Example.COM","password":"secret1","name":"Ada"}"#.to_vec(),
+        );
         let res = handle(&state, req);
         assert_eq!(res.status, 201, "{}", String::from_utf8_lossy(&res.body));
         let body = json_body(&res);
@@ -1556,7 +1627,12 @@ mod tests {
         let mut me = Request::for_test("GET", "/api/me");
         cookie_header(&mut me, &res);
         let me_res = handle(&state, me);
-        assert_eq!(me_res.status, 200, "{}", String::from_utf8_lossy(&me_res.body));
+        assert_eq!(
+            me_res.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&me_res.body)
+        );
         assert_eq!(json_body(&me_res).get_str("email"), Some("ada@example.com"));
 
         let mut signin = Request::for_test("POST", "/api/signin");
@@ -1648,25 +1724,47 @@ mod tests {
         Response::text(200, "").header("Set-Cookie", &format!("csrf_token={token}; Path=/"))
     }
 
-    const OLD_SCHEME_TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const OLD_SCHEME_TOKEN: &str =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     #[test]
     fn csrf_token_round_trips_and_rejects_tampering() {
         let secret = "s";
         let issued = 1_000_000;
         let token = format!("{issued}.{}", csrf_mac(secret, "u1", issued));
-        assert_eq!(check_csrf_token(secret, "u1", &token, issued), CsrfCheck::Valid);
-        assert_eq!(check_csrf_token(secret, "u2", &token, issued), CsrfCheck::Invalid);
-        assert_eq!(check_csrf_token("other", "u1", &token, issued), CsrfCheck::Invalid);
-        assert_eq!(check_csrf_token(secret, "u1", OLD_SCHEME_TOKEN, issued), CsrfCheck::Invalid);
-        assert_eq!(check_csrf_token(secret, "u1", "", issued), CsrfCheck::Invalid);
+        assert_eq!(
+            check_csrf_token(secret, "u1", &token, issued),
+            CsrfCheck::Valid
+        );
+        assert_eq!(
+            check_csrf_token(secret, "u2", &token, issued),
+            CsrfCheck::Invalid
+        );
+        assert_eq!(
+            check_csrf_token("other", "u1", &token, issued),
+            CsrfCheck::Invalid
+        );
+        assert_eq!(
+            check_csrf_token(secret, "u1", OLD_SCHEME_TOKEN, issued),
+            CsrfCheck::Invalid
+        );
+        assert_eq!(
+            check_csrf_token(secret, "u1", "", issued),
+            CsrfCheck::Invalid
+        );
         let moved = format!("{}.{}", issued + 1, csrf_mac(secret, "u1", issued));
-        assert_eq!(check_csrf_token(secret, "u1", &moved, issued), CsrfCheck::Invalid);
+        assert_eq!(
+            check_csrf_token(secret, "u1", &moved, issued),
+            CsrfCheck::Invalid
+        );
         assert_eq!(
             check_csrf_token(secret, "u1", &token, issued + CSRF_TOKEN_EXPIRY_MS + 1),
             CsrfCheck::Expired
         );
-        assert_eq!(check_csrf_token(secret, "u1", &token, issued - 120_000), CsrfCheck::Expired);
+        assert_eq!(
+            check_csrf_token(secret, "u1", &token, issued - 120_000),
+            CsrfCheck::Expired
+        );
     }
 
     #[test]
@@ -1696,7 +1794,12 @@ mod tests {
         let mut me = Request::for_test("GET", "/api/me");
         replay_cookies(&mut me, &[&signup, &stale], false);
         let me_res = handle(&state, me);
-        assert_eq!(me_res.status, 200, "{}", String::from_utf8_lossy(&me_res.body));
+        assert_eq!(
+            me_res.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&me_res.body)
+        );
         assert!(
             me_res.headers.iter().any(|(k, v)| {
                 k.eq_ignore_ascii_case("Set-Cookie") && v.starts_with("csrf_token=")
@@ -1744,7 +1847,8 @@ mod tests {
         req.set_test_body(br#"{"name":"Renamed"}"#.to_vec());
         let res = handle(&state, req);
         assert_eq!(
-            res.status, 403,
+            res.status,
+            403,
             "a stale token must not accept the request: {}",
             String::from_utf8_lossy(&res.body)
         );
@@ -1793,7 +1897,10 @@ mod tests {
         // This account has no subscription, so it owns no Stripe customer.
         let res = portal_request(&state, &signup, "cus_someoneElsesCustomer");
         assert_eq!(res.status, 403, "{}", String::from_utf8_lossy(&res.body));
-        assert_eq!(json_body(&res).get_str("error"), Some("Unauthorized customerID"));
+        assert_eq!(
+            json_body(&res).get_str("error"),
+            Some("Unauthorized customerID")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1832,7 +1939,9 @@ mod tests {
     fn put_me_requires_csrf() {
         let (state, dir) = test_state();
         let mut req = Request::for_test("POST", "/api/signup");
-        req.set_test_body(br#"{"email":"csrf@example.com","password":"secret1","name":"C"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"csrf@example.com","password":"secret1","name":"C"}"#.to_vec(),
+        );
         let signed = handle(&state, req);
         assert_eq!(signed.status, 201);
 
@@ -1853,20 +1962,29 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-
     #[test]
     fn auth_rate_limit_blocks_after_cap() {
         let (state, dir) = test_state();
         let now = config::now_ms();
         for _ in 0..crate::stores::AUTH_RATE_LIMIT {
-            assert!(!state.auth_rate.check_and_record("198.51.100.9", now).limited);
+            assert!(
+                !state
+                    .auth_rate
+                    .check_and_record("198.51.100.9", now)
+                    .limited
+            );
         }
         let mut req = Request::for_test("POST", "/api/signup");
         req.peer_ip = "198.51.100.9".into();
-        req.set_test_body(br#"{"email":"overflow@example.com","password":"secret1","name":"R"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"overflow@example.com","password":"secret1","name":"R"}"#.to_vec(),
+        );
         let res = handle(&state, req);
         assert_eq!(res.status, 429);
-        assert!(res.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("retry-after")));
+        assert!(res
+            .headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("retry-after")));
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1880,18 +1998,27 @@ mod tests {
         let (state, dir) = test_state_locked();
         let now = config::now_ms();
         for _ in 0..crate::stores::AUTH_RATE_LIMIT {
-            assert!(!state.auth_rate.check_and_record("198.51.100.10", now).limited);
+            assert!(
+                !state
+                    .auth_rate
+                    .check_and_record("198.51.100.10", now)
+                    .limited
+            );
         }
         let mut req = Request::for_test("POST", "/api/signup");
         req.peer_ip = "10.0.0.1".into();
         req.set_test_header("x-forwarded-for", "198.51.100.10");
-        req.set_test_body(br#"{"email":"xff-over@example.com","password":"secret1","name":"R"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"xff-over@example.com","password":"secret1","name":"R"}"#.to_vec(),
+        );
         assert_eq!(handle(&state, req).status, 429);
         // Different forwarded IP still allowed (socket peer is the same proxy).
         let mut req = Request::for_test("POST", "/api/signup");
         req.peer_ip = "10.0.0.1".into();
         req.set_test_header("x-forwarded-for", "198.51.100.11");
-        req.set_test_body(br#"{"email":"xff-other@example.com","password":"secret1","name":"R"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"xff-other@example.com","password":"secret1","name":"R"}"#.to_vec(),
+        );
         assert_eq!(handle(&state, req).status, 201);
         unsafe {
             std::env::remove_var("TRUST_PROXY");
@@ -1910,11 +2037,19 @@ mod tests {
         let now = config::now_ms();
         // Exhaust the window for the address the single trusted proxy observed.
         for _ in 0..crate::stores::AUTH_RATE_LIMIT {
-            assert!(!state.auth_rate.check_and_record("198.51.100.10", now).limited);
+            assert!(
+                !state
+                    .auth_rate
+                    .check_and_record("198.51.100.10", now)
+                    .limited
+            );
         }
         // The client prepends junk; the proxy appends the address it saw. Taking
         // the leftmost hop would hand the attacker an unused bucket every time.
-        for (i, spoof) in ["203.0.113.1", "203.0.113.2", "203.0.113.3"].iter().enumerate() {
+        for (i, spoof) in ["203.0.113.1", "203.0.113.2", "203.0.113.3"]
+            .iter()
+            .enumerate()
+        {
             let mut req = Request::for_test("POST", "/api/signup");
             req.peer_ip = "10.0.0.1".into();
             req.set_test_header("x-forwarded-for", &format!("{spoof}, 198.51.100.10"));
@@ -1922,7 +2057,11 @@ mod tests {
                 format!(r#"{{"email":"spoof{i}@example.com","password":"secret1","name":"R"}}"#)
                     .into_bytes(),
             );
-            assert_eq!(handle(&state, req).status, 429, "spoofed hop {spoof} escaped the limit");
+            assert_eq!(
+                handle(&state, req).status,
+                429,
+                "spoofed hop {spoof} escaped the limit"
+            );
         }
         unsafe {
             std::env::remove_var("TRUST_PROXY");
@@ -1947,7 +2086,9 @@ mod tests {
         let mut req = Request::for_test("POST", "/api/signup");
         req.peer_ip = "10.0.0.1".into();
         req.set_test_header("x-forwarded-for", "203.0.113.9");
-        req.set_test_body(br#"{"email":"short-chain@example.com","password":"secret1","name":"R"}"#.to_vec());
+        req.set_test_body(
+            br#"{"email":"short-chain@example.com","password":"secret1","name":"R"}"#.to_vec(),
+        );
         assert_eq!(handle(&state, req).status, 429);
         unsafe {
             std::env::remove_var("TRUST_PROXY");
@@ -1985,9 +2126,16 @@ mod tests {
         let now = config::now_ms();
         state
             .pool
-            .insert_webhook_event("evt_old", "invoice.paid", now - (WEBHOOK_RETENTION_DAYS + 1) * day_ms)
+            .insert_webhook_event(
+                "evt_old",
+                "invoice.paid",
+                now - (WEBHOOK_RETENTION_DAYS + 1) * day_ms,
+            )
             .unwrap();
-        state.pool.insert_webhook_event("evt_new", "invoice.paid", now).unwrap();
+        state
+            .pool
+            .insert_webhook_event("evt_new", "invoice.paid", now)
+            .unwrap();
 
         run_webhook_cleanup(&state);
 
@@ -2194,7 +2342,12 @@ mod tests {
             }}
         }"#;
         assert_eq!(handle(&state, signed_webhook(checkout)).status, 200);
-        assert_eq!(user_subscription(&state, "late@example.com").expect("sub").status, "active");
+        assert_eq!(
+            user_subscription(&state, "late@example.com")
+                .expect("sub")
+                .status,
+            "active"
+        );
 
         // A retried `created` whose snapshot predates the first payment.
         let stale = br#"{
@@ -2290,8 +2443,16 @@ mod tests {
             )
         };
         // The first plan lapses.
-        assert_eq!(handle(&state, signed_webhook(deleted("evt_old_del").as_bytes())).status, 200);
-        assert_eq!(user_subscription(&state, "again@example.com").expect("sub").status, "canceled");
+        assert_eq!(
+            handle(&state, signed_webhook(deleted("evt_old_del").as_bytes())).status,
+            200
+        );
+        assert_eq!(
+            user_subscription(&state, "again@example.com")
+                .expect("sub")
+                .status,
+            "canceled"
+        );
 
         // The user subscribes again: the new subscription takes over.
         let checkout = br#"{
@@ -2304,10 +2465,18 @@ mod tests {
             }}
         }"#;
         assert_eq!(handle(&state, signed_webhook(checkout)).status, 200);
-        assert_eq!(user_subscription(&state, "again@example.com").expect("sub").status, "active");
+        assert_eq!(
+            user_subscription(&state, "again@example.com")
+                .expect("sub")
+                .status,
+            "active"
+        );
 
         // A late redelivery of the old plan's deletion must not re-lock them.
-        let res = handle(&state, signed_webhook(deleted("evt_old_del_retry").as_bytes()));
+        let res = handle(
+            &state,
+            signed_webhook(deleted("evt_old_del_retry").as_bytes()),
+        );
         assert_eq!(res.status, 200, "{}", String::from_utf8_lossy(&res.body));
 
         let sub = user_subscription(&state, "again@example.com").expect("sub");
@@ -2361,7 +2530,12 @@ mod tests {
             .with(|db| db.exec("DROP TRIGGER fail_sub_write"))
             .expect("drop trigger");
         assert_eq!(handle(&state, signed_webhook(payload)).status, 200);
-        assert_eq!(user_subscription(&state, "dbfail@example.com").expect("sub").status, "active");
+        assert_eq!(
+            user_subscription(&state, "dbfail@example.com")
+                .expect("sub")
+                .status,
+            "active"
+        );
         assert!(state
             .pool
             .find_webhook_event("evt_dbfail_cs")
@@ -2487,7 +2661,8 @@ mod tests {
     #[test]
     fn checkout_rejects_unlisted_lookup_key_even_when_stripe_has_it() {
         let mut mock = crate::stripe::StripeMock::default();
-        mock.prices.insert("internal_price".into(), "price_secret".into());
+        mock.prices
+            .insert("internal_price".into(), "price_secret".into());
         let (mut state, dir) = stripe_state_with_mock(mock);
         state.stripe_lookup_keys = vec!["pro_monthly".into()];
         let signup = signed_up(&state, "pay3@example.com");

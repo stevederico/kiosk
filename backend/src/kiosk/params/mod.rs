@@ -133,7 +133,10 @@ mod tests {
 
     #[test]
     fn query_overrides_body() {
-        let merged = merge(parse_form("total=1&items=x").expect("form"), parse_form("total=2").expect("form"));
+        let merged = merge(
+            parse_form("total=1&items=x").expect("form"),
+            parse_form("total=2").expect("form"),
+        );
         assert_eq!(merged.get("total"), Some(&s("2")));
     }
 }

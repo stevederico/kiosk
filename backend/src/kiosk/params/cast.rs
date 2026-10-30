@@ -106,8 +106,17 @@ mod tests {
         assert_eq!(cast_decimal(None), None);
         assert_eq!(cast_decimal(Some(&Param::Null)), None);
         assert_eq!(cast_decimal(Some(&Param::Bool(true))).as_deref(), Some("1"));
-        assert_eq!(cast_decimal(Some(&Param::Bool(false))).as_deref(), Some("0"));
-        assert_eq!(cast_decimal(Some(&Param::Num("9.99".into()))).as_deref(), Some("9.99"));
-        assert_eq!(cast_decimal(Some(&Param::Arr(vec![]))).as_deref(), Some("0"));
+        assert_eq!(
+            cast_decimal(Some(&Param::Bool(false))).as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            cast_decimal(Some(&Param::Num("9.99".into()))).as_deref(),
+            Some("9.99")
+        );
+        assert_eq!(
+            cast_decimal(Some(&Param::Arr(vec![]))).as_deref(),
+            Some("0")
+        );
     }
 }

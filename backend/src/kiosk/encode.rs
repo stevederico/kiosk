@@ -233,7 +233,10 @@ mod tests {
     #[test]
     fn db_timestamp_has_microseconds() {
         // 2026-10-30T15:24:43.540984Z
-        assert_eq!(db_timestamp(1_793_373_883_540_984), "2026-10-30 15:24:43.540984");
+        assert_eq!(
+            db_timestamp(1_793_373_883_540_984),
+            "2026-10-30 15:24:43.540984"
+        );
     }
 
     #[test]
@@ -243,11 +246,17 @@ mod tests {
 
     #[test]
     fn json_timestamp_truncates_to_millis() {
-        assert_eq!(json_timestamp("2026-10-28 01:10:18.559999"), "2026-10-28T01:10:18.559Z");
+        assert_eq!(
+            json_timestamp("2026-10-28 01:10:18.559999"),
+            "2026-10-28T01:10:18.559Z"
+        );
     }
 
     #[test]
     fn json_timestamp_without_fraction() {
-        assert_eq!(json_timestamp("2026-10-28 01:10:18"), "2026-10-28T01:10:18.000Z");
+        assert_eq!(
+            json_timestamp("2026-10-28 01:10:18"),
+            "2026-10-28T01:10:18.000Z"
+        );
     }
 }

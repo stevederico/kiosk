@@ -58,7 +58,10 @@ static ORDER_LIMITER: LazyLock<OrderLimiter> = LazyLock::new(OrderLimiter::new);
 pub fn prepare(state: &AppState) -> Result<(), String> {
     let seeded = store::prepare(&state.pool).map_err(|e| format!("kiosk schema: {e}"))?;
     if seeded {
-        state.log.info("Seeded kiosk menu", &[("items", crate::json::i(store::SEED_MENU.len() as i64))]);
+        state.log.info(
+            "Seeded kiosk menu",
+            &[("items", crate::json::i(store::SEED_MENU.len() as i64))],
+        );
     }
     Ok(())
 }
@@ -71,7 +74,8 @@ pub fn handle(state: &AppState, req: Request) -> Response {
     let start = config::now_ms();
     middleware::dev_request_log(&state.log, &req, state.prod);
     let res = dispatch(state, &req);
-    let res = middleware::apply_secure_headers(res, state.prod).set_header("Content-Security-Policy", CSP);
+    let res = middleware::apply_secure_headers(res, state.prod)
+        .set_header("Content-Security-Policy", CSP);
     middleware::access_log(&req.method, &req.path, res.status, config::now_ms() - start);
     res
 }
@@ -145,7 +149,10 @@ fn menu(state: &AppState, req: &Request) -> Response {
     match store::menu_json(&state.pool) {
         Ok(json) => conditional(req, "application/json; charset=utf-8", json.into_bytes()),
         Err(e) => {
-            state.log.error("Menu query failed", &[("error", crate::json::s(e.to_string()))]);
+            state.log.error(
+                "Menu query failed",
+                &[("error", crate::json::s(e.to_string()))],
+            );
             error_page(state, 500)
         }
     }
@@ -162,7 +169,8 @@ fn post_orders(state: &AppState, req: &Request) -> Response {
         return Response::text(413, "Payload Too Large");
     }
     if let Err(secs) = ORDER_LIMITER.check(&routes::client_ip(req), config::now_ms()) {
-        return Response::text(429, "Too Many Requests").set_header("Retry-After", &secs.to_string());
+        return Response::text(429, "Too Many Requests")
+            .set_header("Retry-After", &secs.to_string());
     }
     let form = match form_body(req) {
         Ok(form) => form,
@@ -198,7 +206,10 @@ fn create_order(state: &AppState, req: &Request, form: Option<Param>) -> Respons
     };
     let params = params::merge(body, query);
     let total = params::cast_decimal(params.get("total"));
-    let items = params.get("items").filter(|v| **v != Param::Null).map(params::encode_items);
+    let items = params
+        .get("items")
+        .filter(|v| **v != Param::Null)
+        .map(params::encode_items);
     match store::create_order(&state.pool, total, items) {
         Ok(id) => Response::bytes(
             201,
@@ -220,7 +231,10 @@ fn create_order(state: &AppState, req: &Request, form: Option<Param>) -> Respons
 /// # Errors
 /// [`params::FormLimit`] past Rack's depth (32) or pair (4096) limit.
 fn form_body(req: &Request) -> Result<Option<Param>, params::FormLimit> {
-    let ct = req.header("content-type").unwrap_or("").to_ascii_lowercase();
+    let ct = req
+        .header("content-type")
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if !ct.starts_with("application/x-www-form-urlencoded") || is_blank(&req.body) {
         return Ok(None);
     }
@@ -229,7 +243,10 @@ fn form_body(req: &Request) -> Result<Option<Param>, params::FormLimit> {
 
 /// Body params for a JSON post; any other body contributes none.
 fn json_body(req: &Request) -> Result<Param, params::InvalidJson> {
-    let ct = req.header("content-type").unwrap_or("").to_ascii_lowercase();
+    let ct = req
+        .header("content-type")
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if !ct.starts_with("application/json") || is_blank(&req.body) {
         return Ok(Param::Obj(Vec::new()));
     }
@@ -267,7 +284,8 @@ fn conditional(req: &Request, content_type: &str, body: Vec<u8>) -> Response {
     } else {
         Response::bytes(200, content_type, body)
     };
-    res.set_header("ETag", &etag).set_header("Cache-Control", DYNAMIC_CACHE)
+    res.set_header("ETag", &etag)
+        .set_header("Cache-Control", DYNAMIC_CACHE)
 }
 
 /// Serve a public file: `path`, then `path.html` (ActionDispatch::Static).
@@ -288,7 +306,10 @@ fn static_file(state: &AppState, path: &str) -> Response {
     }
     crate::http::serve_file(&state.static_dir, path)
         .or_else(|| crate::http::serve_file(&state.static_dir, &format!("{path}.html")))
-        .map_or_else(|| error_page(state, 404), |res| res.set_header("Cache-Control", STATIC_CACHE))
+        .map_or_else(
+            || error_page(state, 404),
+            |res| res.set_header("Cache-Control", STATIC_CACHE),
+        )
 }
 
 /// Read a file from the built frontend directory.

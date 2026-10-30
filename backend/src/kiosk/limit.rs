@@ -36,7 +36,9 @@ impl OrderLimiter {
         let window_start = now_ms - ORDER_WINDOW_MS;
         if !map.contains_key(ip) && map.len() >= ORDER_MAX_ENTRIES {
             map.retain(|_, times| times.last().is_some_and(|&t| t > window_start));
-            evict_oldest_entries(&mut map, ORDER_MAX_ENTRIES - 1, |times| times.last().copied().unwrap_or(0));
+            evict_oldest_entries(&mut map, ORDER_MAX_ENTRIES - 1, |times| {
+                times.last().copied().unwrap_or(0)
+            });
         }
         let times = map.entry(ip.to_string()).or_default();
         times.retain(|&t| t > window_start);

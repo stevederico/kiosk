@@ -97,8 +97,8 @@ pub fn parse_env_file(path: &Path, log: &Logger) -> Option<BTreeMap<String, Stri
 fn strip_quotes(value: &str) -> String {
     let bytes = value.as_bytes();
     let lead = matches!(bytes.first(), Some(b'"') | Some(b'\''));
-    let trail = bytes.len() > if lead { 1 } else { 0 }
-        && matches!(bytes.last(), Some(b'"') | Some(b'\''));
+    let trail =
+        bytes.len() > if lead { 1 } else { 0 } && matches!(bytes.last(), Some(b'"') | Some(b'\''));
     let start = usize::from(lead);
     let end = value.len() - usize::from(trail);
     value[start..end].to_string()
@@ -114,7 +114,10 @@ fn ensure_regular_env_file(env_path: &Path, example_path: &Path, log: &Logger) -
             &[("filePath", Json::Str(env_path.display().to_string()))],
         );
         if let Err(e) = fs::remove_file(env_path) {
-            log.error("Failed to remove .env symlink", &[("error", Json::Str(e.to_string()))]);
+            log.error(
+                "Failed to remove .env symlink",
+                &[("error", Json::Str(e.to_string()))],
+            );
             return false;
         }
     }
@@ -127,7 +130,10 @@ fn ensure_regular_env_file(env_path: &Path, example_path: &Path, log: &Logger) -
     }) {
         Ok(()) => true,
         Err(e) => {
-            log.error("Failed to create .env from template", &[("error", Json::Str(e.to_string()))]);
+            log.error(
+                "Failed to create .env from template",
+                &[("error", Json::Str(e.to_string()))],
+            );
             false
         }
     }
@@ -251,14 +257,20 @@ pub fn load_config(dir: &Path, log: &Logger) -> BackendConfig {
     let Ok(text) = fs::read(&path) else {
         log.error(
             "Failed to load config, using defaults",
-            &[("error", Json::Str(format!("cannot read {}", path.display())))],
+            &[(
+                "error",
+                Json::Str(format!("cannot read {}", path.display())),
+            )],
         );
         return BackendConfig::defaults();
     };
     let parsed = match json::parse(&text) {
         Ok(v) => v,
         Err(e) => {
-            log.error("Failed to load config, using defaults", &[("error", Json::Str(e.to_string()))]);
+            log.error(
+                "Failed to load config, using defaults",
+                &[("error", Json::Str(e.to_string()))],
+            );
             return BackendConfig::defaults();
         }
     };
@@ -340,7 +352,9 @@ pub fn validate_environment(config: &BackendConfig, log: &Logger) -> bool {
     let mut i = 0;
     while let Some(start) = conn[i..].find("${") {
         let abs = i + start;
-        let Some(close) = conn[abs + 2..].find('}') else { break };
+        let Some(close) = conn[abs + 2..].find('}') else {
+            break;
+        };
         let name = &conn[abs + 2..abs + 2 + close];
         missing.push(Json::Str(format!("{name} (referenced in database config)")));
         i = abs + 3 + close;
@@ -428,7 +442,9 @@ pub struct Logger {
 impl Logger {
     /// Create a logger for the given mode.
     pub fn new(prod: bool) -> Logger {
-        Logger { prod: AtomicBool::new(prod) }
+        Logger {
+            prod: AtomicBool::new(prod),
+        }
     }
 
     /// Whether production formatting is active.
@@ -489,12 +505,21 @@ fn pretty(v: &Json, depth: usize) -> String {
         Json::Obj(m) if !m.is_empty() => {
             let body: Vec<String> = m
                 .iter()
-                .map(|(k, val)| format!("{pad}{}: {}", json::stringify(&Json::Str(k.clone())), pretty(val, depth + 1)))
+                .map(|(k, val)| {
+                    format!(
+                        "{pad}{}: {}",
+                        json::stringify(&Json::Str(k.clone())),
+                        pretty(val, depth + 1)
+                    )
+                })
                 .collect();
             format!("{{\n{}\n{close_pad}}}", body.join(",\n"))
         }
         Json::Arr(items) if !items.is_empty() => {
-            let body: Vec<String> = items.iter().map(|it| format!("{pad}{}", pretty(it, depth + 1))).collect();
+            let body: Vec<String> = items
+                .iter()
+                .map(|it| format!("{pad}{}", pretty(it, depth + 1)))
+                .collect();
             format!("[\n{}\n{close_pad}]", body.join(",\n"))
         }
         other => json::stringify(other),

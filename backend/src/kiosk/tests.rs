@@ -22,7 +22,10 @@ fn state() -> AppState {
     let dist = dir.join("dist");
     std::fs::create_dir_all(dist.join("images")).expect("dist");
     for (name, body) in [
-        ("index.html", "<!doctype html><title>Frankie Food Court Kiosk</title>"),
+        (
+            "index.html",
+            "<!doctype html><title>Frankie Food Court Kiosk</title>",
+        ),
         ("404.html", "not found page"),
         ("400.html", "bad request page"),
         ("422.html", "rejected page"),
@@ -87,7 +90,10 @@ fn post_json(path: &str, body: &str, origin: Option<&str>) -> Request {
 }
 
 fn header<'a>(res: &'a Response, name: &str) -> Option<&'a str> {
-    res.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+    res.headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str())
 }
 
 fn body(res: &Response) -> String {
@@ -97,7 +103,10 @@ fn body(res: &Response) -> String {
 #[test]
 fn root_serves_kiosk_page() {
     let res = handle(&state(), req("GET", "/"));
-    assert_eq!((res.status, header(&res, "content-type")), (200, Some("text/html; charset=utf-8")));
+    assert_eq!(
+        (res.status, header(&res, "content-type")),
+        (200, Some("text/html; charset=utf-8"))
+    );
     assert!(body(&res).contains("Frankie Food Court Kiosk"));
 }
 
@@ -121,14 +130,24 @@ fn matching_etag_answers_304() {
 #[test]
 fn menu_items_is_rails_json() {
     let res = handle(&state(), req("GET", "/menu_items"));
-    assert_eq!((res.status, header(&res, "content-type")), (200, Some("application/json; charset=utf-8")));
-    assert!(body(&res).starts_with(r#"[{"id":1,"name":"Hotdog \u0026 Soda","category":null,"created_at":""#));
+    assert_eq!(
+        (res.status, header(&res, "content-type")),
+        (200, Some("application/json; charset=utf-8"))
+    );
+    assert!(body(&res)
+        .starts_with(r#"[{"id":1,"name":"Hotdog \u0026 Soda","category":null,"created_at":""#));
 }
 
 #[test]
 fn menu_items_accepts_any_format_and_slashes() {
     let st = state();
-    for path in ["/menu_items.json", "/menu_items.xml", "/menu_items/", "//menu_items", "/menu_items.json/"] {
+    for path in [
+        "/menu_items.json",
+        "/menu_items.xml",
+        "/menu_items/",
+        "//menu_items",
+        "/menu_items.json/",
+    ] {
         assert_eq!(handle(&st, req("GET", path)).status, 200, "{path}");
     }
 }
@@ -136,7 +155,13 @@ fn menu_items_accepts_any_format_and_slashes() {
 #[test]
 fn menu_items_unknown_shapes_are_404() {
     let st = state();
-    for path in ["/MENU_ITEMS", "/menu_items/1", "/menu_items/.json", "/menu_items.a.b", "/%6Benu_items"] {
+    for path in [
+        "/MENU_ITEMS",
+        "/menu_items/1",
+        "/menu_items/.json",
+        "/menu_items.a.b",
+        "/%6Benu_items",
+    ] {
         assert_eq!(handle(&st, req("GET", path)).status, 404, "{path}");
     }
 }
@@ -150,13 +175,21 @@ fn up_is_not_routed_like_rails() {
 #[test]
 fn not_found_uses_rails_page() {
     let res = handle(&state(), req("GET", "/nope"));
-    assert_eq!((res.status, header(&res, "content-type")), (404, Some("text/html; charset=UTF-8")));
+    assert_eq!(
+        (res.status, header(&res, "content-type")),
+        (404, Some("text/html; charset=UTF-8"))
+    );
 }
 
 #[test]
 fn template_account_api_is_closed() {
     let st = state();
-    for (m, p) in [("POST", "/api/signup"), ("POST", "/api/signin"), ("GET", "/api/me"), ("POST", "/api/checkout")] {
+    for (m, p) in [
+        ("POST", "/api/signup"),
+        ("POST", "/api/signin"),
+        ("GET", "/api/me"),
+        ("POST", "/api/checkout"),
+    ] {
         assert_eq!(handle(&st, req(m, p)).status, 404, "{m} {p}");
     }
 }
@@ -171,7 +204,10 @@ fn health_passes_through_to_template() {
 fn static_files_and_html_fallback() {
     let st = state();
     assert_eq!(handle(&st, req("GET", "/robots.txt")).status, 200);
-    assert_eq!(handle(&st, req("GET", "/images/frankie-logo.png")).status, 200);
+    assert_eq!(
+        handle(&st, req("GET", "/images/frankie-logo.png")).status,
+        200
+    );
     let page = handle(&st, req("GET", "/404"));
     assert_eq!((page.status, body(&page).as_str()), (200, "not found page"));
     assert_eq!(header(&page, "cache-control"), Some(STATIC_CACHE));
@@ -189,7 +225,10 @@ fn kiosk_html_is_the_kiosk_page() {
     let st = state();
     for path in ["/kiosk.html", "/kiosk"] {
         let res = handle(&st, req("GET", path));
-        assert!(res.status == 200 && body(&res).contains("Frankie"), "{path}");
+        assert!(
+            res.status == 200 && body(&res).contains("Frankie"),
+            "{path}"
+        );
     }
 }
 
@@ -204,7 +243,10 @@ fn old_browser_gets_406_on_actions() {
     let mut r = req("GET", "/");
     r.headers = crate::http::Headers::from_pairs(vec![("user-agent".into(), CHROME_119.into())]);
     let res = handle(&state(), r);
-    assert_eq!((res.status, body(&res).as_str()), (406, "unsupported browser page"));
+    assert_eq!(
+        (res.status, body(&res).as_str()),
+        (406, "unsupported browser page")
+    );
 }
 
 #[test]
@@ -222,15 +264,35 @@ fn post_orders_without_origin_is_422_like_rails() {
 
 #[test]
 fn post_orders_cross_origin_is_422() {
-    let res = handle(&state(), post_json("/orders", r#"{"total":"9.99"}"#, Some("https://evil.example")));
+    let res = handle(
+        &state(),
+        post_json(
+            "/orders",
+            r#"{"total":"9.99"}"#,
+            Some("https://evil.example"),
+        ),
+    );
     assert_eq!(res.status, 422);
 }
 
 #[test]
 fn post_orders_same_origin_creates_order() {
     let st = state();
-    let res = handle(&st, post_json("/orders", r#"{"total":"9.99","items":[{"id":1,"qty":2}]}"#, Some("https://kiosk.bixbyapps.com")));
-    assert_eq!((res.status, body(&res).as_str()), (201, r#"{"message":"Order created successfully","order_id":1}"#));
+    let res = handle(
+        &st,
+        post_json(
+            "/orders",
+            r#"{"total":"9.99","items":[{"id":1,"qty":2}]}"#,
+            Some("https://kiosk.bixbyapps.com"),
+        ),
+    );
+    assert_eq!(
+        (res.status, body(&res).as_str()),
+        (
+            201,
+            r#"{"message":"Order created successfully","order_id":1}"#
+        )
+    );
     let rows = st
         .pool
         .with(|db| db.query("SELECT total, items FROM orders WHERE id = 1", &[]))
@@ -254,14 +316,20 @@ fn post_orders_form_encoded() {
     r.set_test_header("origin", "https://kiosk.bixbyapps.com");
     r.set_test_body(b"total=3&items[]=a&items[]=b".to_vec());
     assert_eq!(handle(&st, r).status, 201);
-    let rows = st.pool.with(|db| db.query("SELECT total, items FROM orders", &[])).expect("query");
+    let rows = st
+        .pool
+        .with(|db| db.query("SELECT total, items FROM orders", &[]))
+        .expect("query");
     assert_eq!(rows[0].get("total"), Some(&crate::db::Value::Int(3)));
     assert_eq!(rows[0].text("items"), Some(r#"["a","b"]"#));
 }
 
 #[test]
 fn post_orders_bad_json_is_400() {
-    let res = handle(&state(), post_json("/orders", "{bad", Some("https://kiosk.bixbyapps.com")));
+    let res = handle(
+        &state(),
+        post_json("/orders", "{bad", Some("https://kiosk.bixbyapps.com")),
+    );
     assert_eq!((res.status, body(&res).as_str()), (400, "bad request page"));
 }
 
@@ -279,7 +347,10 @@ fn post_nested_form(n: usize, origin: Option<&str>) -> Request {
 }
 
 fn order_count(st: &AppState) -> usize {
-    st.pool.with(|db| db.query("SELECT id FROM orders", &[])).expect("query").len()
+    st.pool
+        .with(|db| db.query("SELECT id FROM orders", &[]))
+        .expect("query")
+        .len()
 }
 
 #[test]
@@ -292,7 +363,10 @@ fn post_orders_bad_json_without_origin_is_400_like_rails() {
 #[test]
 fn post_orders_bad_json_cross_origin_is_422_like_rails() {
     // Rails rejects a foreign Origin before reading the body.
-    let res = handle(&state(), post_json("/orders", "{bad", Some("https://evil.example")));
+    let res = handle(
+        &state(),
+        post_json("/orders", "{bad", Some("https://evil.example")),
+    );
     assert_eq!(res.status, 422);
 }
 
@@ -310,13 +384,19 @@ fn post_orders_deep_form_is_400_and_server_keeps_serving() {
 
 #[test]
 fn post_orders_depth_33_form_is_400() {
-    assert_eq!(handle(&state(), post_nested_form(32, Some(SAME_ORIGIN))).status, 400);
+    assert_eq!(
+        handle(&state(), post_nested_form(32, Some(SAME_ORIGIN))).status,
+        400
+    );
 }
 
 #[test]
 fn post_orders_depth_32_form_saves() {
     let st = state();
-    assert_eq!(handle(&st, post_nested_form(31, Some(SAME_ORIGIN))).status, 201);
+    assert_eq!(
+        handle(&st, post_nested_form(31, Some(SAME_ORIGIN))).status,
+        201
+    );
     assert_eq!(order_count(&st), 1);
 }
 
@@ -332,7 +412,11 @@ fn post_orders_deep_form_is_400_before_browser_and_origin_checks() {
 #[test]
 fn post_orders_over_16_kib_is_413() {
     let st = state();
-    let mut r = post_json("/orders", &format!(r#"{{"items":"{}"}}"#, "x".repeat(ORDER_BODY_MAX)), Some(SAME_ORIGIN));
+    let mut r = post_json(
+        "/orders",
+        &format!(r#"{{"items":"{}"}}"#, "x".repeat(ORDER_BODY_MAX)),
+        Some(SAME_ORIGIN),
+    );
     r.set_test_header("sec-fetch-site", "same-origin");
     assert_eq!(handle(&st, r).status, 413);
     assert_eq!(order_count(&st), 0);
@@ -340,13 +424,20 @@ fn post_orders_over_16_kib_is_413() {
 
 #[test]
 fn post_orders_qa_60kb_payload_is_413() {
-    assert_eq!(handle(&state(), post_nested_form(20_000, Some(SAME_ORIGIN))).status, 413);
+    assert_eq!(
+        handle(&state(), post_nested_form(20_000, Some(SAME_ORIGIN))).status,
+        413
+    );
 }
 
 #[test]
 fn post_orders_at_16_kib_is_not_413() {
     let pad = ORDER_BODY_MAX - r#"{"items":""}"#.len();
-    let r = post_json("/orders", &format!(r#"{{"items":"{}"}}"#, "x".repeat(pad)), Some(SAME_ORIGIN));
+    let r = post_json(
+        "/orders",
+        &format!(r#"{{"items":"{}"}}"#, "x".repeat(pad)),
+        Some(SAME_ORIGIN),
+    );
     assert_eq!(handle(&state(), r).status, 201);
 }
 
@@ -364,7 +455,8 @@ fn post_orders_eleventh_in_a_minute_is_429() {
     }
     let res = handle(&st, post());
     assert_eq!(res.status, 429);
-    assert!(header(&res, "retry-after").is_some_and(|v| v.parse::<i64>().is_ok_and(|s| (1..=60).contains(&s))));
+    assert!(header(&res, "retry-after")
+        .is_some_and(|v| v.parse::<i64>().is_ok_and(|s| (1..=60).contains(&s))));
     assert_eq!(order_count(&st), limit::ORDER_LIMIT);
 }
 
@@ -396,5 +488,9 @@ fn post_menu_items_is_404() {
 fn csp_allows_data_images_and_no_third_party_hosts() {
     let res = handle(&state(), req("GET", "/"));
     let csp = header(&res, "content-security-policy").expect("csp");
-    assert!(csp.contains("script-src 'self';") && csp.contains("connect-src 'self';") && csp.contains("img-src 'self' https: data:"));
+    assert!(
+        csp.contains("script-src 'self';")
+            && csp.contains("connect-src 'self';")
+            && csp.contains("img-src 'self' https: data:")
+    );
 }

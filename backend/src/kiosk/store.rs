@@ -80,7 +80,12 @@ pub fn prepare(pool: &Pool) -> Result<bool, DbError> {
             let now = Value::Text(encode::db_timestamp(encode::now_micros()));
             db.run(
                 "INSERT INTO menu_items (name, created_at, updated_at, price) VALUES (?, ?, ?, ?)",
-                &[Value::Text((*name).to_string()), now.clone(), now, Value::Text((*price).to_string())],
+                &[
+                    Value::Text((*name).to_string()),
+                    now.clone(),
+                    now,
+                    Value::Text((*price).to_string()),
+                ],
             )?;
         }
         Ok(true)
@@ -169,7 +174,11 @@ fn push_decimal(out: &mut String, v: Option<&Value>) {
 ///
 /// # Errors
 /// Any SQLite failure; the route answers 422 with its message.
-pub fn create_order(pool: &Pool, total: Option<String>, items: Option<String>) -> Result<i64, DbError> {
+pub fn create_order(
+    pool: &Pool,
+    total: Option<String>,
+    items: Option<String>,
+) -> Result<i64, DbError> {
     let now = Value::Text(encode::db_timestamp(encode::now_micros()));
     let opt = |v: Option<String>| v.map_or(Value::Null, Value::Text);
     let changes = pool.with(|db| {
@@ -199,7 +208,9 @@ mod tests {
 
     fn scalar(pool: &Pool, sql: &str) -> Value {
         let rows = pool.with(|db| db.query(sql, &[])).expect("query");
-        rows.first().and_then(|r| r.get("v").cloned()).unwrap_or(Value::Null)
+        rows.first()
+            .and_then(|r| r.get("v").cloned())
+            .unwrap_or(Value::Null)
     }
 
     #[test]
@@ -207,21 +218,33 @@ mod tests {
         let pool = temp_pool();
         assert!(prepare(&pool).expect("first"));
         assert!(!prepare(&pool).expect("second"));
-        assert_eq!(scalar(&pool, "SELECT count(*) AS v FROM menu_items"), Value::Int(19));
+        assert_eq!(
+            scalar(&pool, "SELECT count(*) AS v FROM menu_items"),
+            Value::Int(19)
+        );
     }
 
     #[test]
     fn seeded_prices_store_as_real_like_rails() {
         let pool = temp_pool();
         prepare(&pool).expect("prepare");
-        assert_eq!(scalar(&pool, "SELECT typeof(price) AS v FROM menu_items WHERE id = 1"), Value::Text("real".into()));
+        assert_eq!(
+            scalar(
+                &pool,
+                "SELECT typeof(price) AS v FROM menu_items WHERE id = 1"
+            ),
+            Value::Text("real".into())
+        );
     }
 
     #[test]
     fn records_rails_migration_versions() {
         let pool = temp_pool();
         prepare(&pool).expect("prepare");
-        assert_eq!(scalar(&pool, "SELECT count(*) AS v FROM schema_migrations"), Value::Int(5));
+        assert_eq!(
+            scalar(&pool, "SELECT count(*) AS v FROM schema_migrations"),
+            Value::Int(5)
+        );
     }
 
     #[test]
@@ -260,9 +283,22 @@ mod tests {
         let id = create_order(&pool, Some("9.99".into()), Some("[1]".into())).expect("create");
         assert_eq!(id, 1);
         let zero = create_order(&pool, Some("0".into()), None).expect("create");
-        assert_eq!(scalar(&pool, &format!("SELECT typeof(total) AS v FROM orders WHERE id = {zero}")), Value::Text("integer".into()));
-        let rounded = create_order(&pool, Some("9.999999999999999999".into()), None).expect("create");
-        assert_eq!(scalar(&pool, &format!("SELECT total AS v FROM orders WHERE id = {rounded}")), Value::Int(10));
+        assert_eq!(
+            scalar(
+                &pool,
+                &format!("SELECT typeof(total) AS v FROM orders WHERE id = {zero}")
+            ),
+            Value::Text("integer".into())
+        );
+        let rounded =
+            create_order(&pool, Some("9.999999999999999999".into()), None).expect("create");
+        assert_eq!(
+            scalar(
+                &pool,
+                &format!("SELECT total AS v FROM orders WHERE id = {rounded}")
+            ),
+            Value::Int(10)
+        );
     }
 
     #[test]
@@ -270,6 +306,12 @@ mod tests {
         let pool = temp_pool();
         prepare(&pool).expect("prepare");
         let id = create_order(&pool, None, None).expect("create");
-        assert_eq!(scalar(&pool, &format!("SELECT total AS v FROM orders WHERE id = {id}")), Value::Null);
+        assert_eq!(
+            scalar(
+                &pool,
+                &format!("SELECT total AS v FROM orders WHERE id = {id}")
+            ),
+            Value::Null
+        );
     }
 }

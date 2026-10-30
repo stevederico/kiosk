@@ -46,7 +46,9 @@ pub fn parse_form(input: &str) -> Result<Param, FormLimit> {
             Some(at) => (&key[..at], &key[at..]),
             None => (key.as_str(), ""),
         };
-        let Some(path) = bracket_path(rest)? else { continue };
+        let Some(path) = bracket_path(rest)? else {
+            continue;
+        };
         if head.is_empty() {
             continue;
         }
@@ -68,8 +70,12 @@ fn bracket_path(mut rest: &str) -> Result<Option<Vec<String>>, FormLimit> {
         if path.last().is_some_and(String::is_empty) {
             return Ok(None);
         }
-        let Some(inner) = rest.strip_prefix('[') else { return Ok(None) };
-        let Some(close) = inner.find(']') else { return Ok(None) };
+        let Some(inner) = rest.strip_prefix('[') else {
+            return Ok(None);
+        };
+        let Some(close) = inner.find(']') else {
+            return Ok(None);
+        };
         let seg = &inner[..close];
         // The name is level 1; each named segment before this one added one.
         if !seg.is_empty() && path.len() + 2 > MAX_DEPTH {
@@ -94,14 +100,19 @@ fn insert_path(root: &mut Vec<(String, Param)>, key: String, path: &[String], va
             }
             return;
         }
-        let idx = match pairs.iter().position(|(k, v)| *k == key && matches!(v, Param::Obj(_))) {
+        let idx = match pairs
+            .iter()
+            .position(|(k, v)| *k == key && matches!(v, Param::Obj(_)))
+        {
             Some(i) => i,
             None => {
                 upsert(pairs, key.clone(), Param::Obj(Vec::new()));
                 pairs.iter().position(|(k, _)| *k == key).unwrap_or(0)
             }
         };
-        let Some((_, Param::Obj(inner))) = pairs.get_mut(idx) else { return };
+        let Some((_, Param::Obj(inner))) = pairs.get_mut(idx) else {
+            return;
+        };
         pairs = inner;
         key.clone_from(seg);
     }
@@ -133,7 +144,10 @@ mod tests {
     fn form_nested_items() {
         // Rails stored {"0":{"id":"1","qty":"2"}} for items[0][id]=1&items[0][qty]=2.
         let p = parse_form("items[0][id]=1&items[0][qty]=2").expect("form");
-        assert_eq!(encode_items(p.get("items").expect("items")), r#"{"0":{"id":"1","qty":"2"}}"#);
+        assert_eq!(
+            encode_items(p.get("items").expect("items")),
+            r#"{"0":{"id":"1","qty":"2"}}"#
+        );
     }
 
     #[test]
@@ -166,12 +180,18 @@ mod tests {
 
     #[test]
     fn form_rejects_depth_33() {
-        assert_eq!(parse_form(&nested_key(MAX_DEPTH, "")), Err(FormLimit::TooDeep));
+        assert_eq!(
+            parse_form(&nested_key(MAX_DEPTH, "")),
+            Err(FormLimit::TooDeep)
+        );
     }
 
     #[test]
     fn form_rejects_depth_33_with_trailing_brackets() {
-        assert_eq!(parse_form(&nested_key(MAX_DEPTH, "[]")), Err(FormLimit::TooDeep));
+        assert_eq!(
+            parse_form(&nested_key(MAX_DEPTH, "[]")),
+            Err(FormLimit::TooDeep)
+        );
     }
 
     #[test]
@@ -189,13 +209,19 @@ mod tests {
 
     #[test]
     fn form_accepts_4096_params() {
-        let body = (0..MAX_PARAMS).map(|i| format!("k{i}=1")).collect::<Vec<_>>().join("&");
+        let body = (0..MAX_PARAMS)
+            .map(|i| format!("k{i}=1"))
+            .collect::<Vec<_>>()
+            .join("&");
         assert!(parse_form(&body).is_ok());
     }
 
     #[test]
     fn form_rejects_4097_params() {
-        let body = (0..=MAX_PARAMS).map(|i| format!("k{i}=1")).collect::<Vec<_>>().join("&");
+        let body = (0..=MAX_PARAMS)
+            .map(|i| format!("k{i}=1"))
+            .collect::<Vec<_>>()
+            .join("&");
         assert_eq!(parse_form(&body), Err(FormLimit::TooManyParams));
     }
 }
