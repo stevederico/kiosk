@@ -1,13 +1,13 @@
 # Kiosk rewrite report
 
-Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewritten on skateboard 5.13.0 / skateboard-ui 5.11.0 (React + zero-crate Rust + SQLite) in `~/Projects/kiosk-skateboard`. Local repo only: branch `master`, no remote, nothing pushed, nothing deployed. Date: 2026-10-30.
+Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewritten on skateboard 5.13.0 / skateboard-ui 5.11.0 (React + zero-crate Rust + SQLite) in `~/Projects/kiosk-skateboard`. Branch `master`, nothing deployed. Date: 2026-10-30. QA gate fixes and publishing to `stevederico/kiosk`: see the last section, "QA gate fixes (0.7.0)".
 
 ## Result
 
 - Parity: 47 of 47 portable items done, 12 framework-only items not ported on purpose (PARITY.md, `[-]` rows with reasons). 0 open
 - HTTP parity vs Rails run from a copy: 49 of 50 checks match; the 1 difference is the new `/api/health`
 - Scripted browser run on both apps: identical totals, visibility and saved cart at every step
-- Tests: 337 Rust passed (279 template + 58 kiosk), 1 ignored (template live-Stripe test); 57 front-end passed (25 kiosk + 32 template). 0 failed. After the 5.13.0 upgrade: 342 Rust (284 + 58), 57 front end (see the last section)
+- Tests: 337 Rust passed (279 template + 58 kiosk), 1 ignored (template live-Stripe test); 57 front-end passed (25 kiosk + 32 template). 0 failed. After the 5.13.0 upgrade: 342 Rust (284 + 58), 57 front end. After the 0.7.0 QA gate fixes: 369 Rust, 57 front end (see the last sections)
 - `cargo build --release --locked`: ok (binary 1.0 MB). `[dependencies]` empty; `Cargo.lock` holds only `skateboard-backend`
 - `docker build --pull`: ok from a clean `git archive` of `232ffb3`, image `kiosk-skateboard:232ffb3` (`sha256:1fc1d4b9161a...`), 141,648,913 bytes (142 MB, 36 MB gzipped) vs Rails image 817 MB. Smoke run: `/` 200, `/menu_items` 19 items. Idle memory 7 MB vs 135 MB (Rails), same machine
 - No new crates or npm packages. One stop recorded in BLOCKERS.md (Vitest)
@@ -23,7 +23,12 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 | `232ffb3` | Dockerfile, parity scripts, docs, this report |
 | `0d9316c` | Image ID recorded in this report |
 | `cfec801` | 0.6.0: update to skateboard 5.13.0 / skateboard-ui 5.11.0 |
-| next | PARITY.md and REPORT.md results for 5.13.0 |
+| `3865711` | PARITY.md and REPORT.md results for 5.13.0 |
+| `9d970f2` | Form param depth/count caps, params/ split, POST /orders 413 + 429 |
+| `8ef647c` | Clippy fixes in the vendored template |
+| `e17e8f6` | `cargo fmt` |
+| `284a655` | 0.7.0: base images 7+ days old, docs, `rk_` placeholders |
+| next | PARITY.md and REPORT.md results for 0.7.0 |
 
 ## How it was verified
 
@@ -37,7 +42,7 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 
 ## Decisions for Steve
 
-1. **`POST /orders`.** Rails returns 422 to every request (CSRF on, and the page never gets a token), so orders are never saved in production; the kiosk page never calls it either. Built: same-origin browser requests create the order (Rails' exact create logic and response); curl, cross-site and no-Origin requests get the same 422 page as Rails. Alternative: always 422 (strict). Say which
+1. **`POST /orders`.** Decided: keep saving same-origin orders (approved by Steve 2026-10-30, 9:09 AM PT), with a per-IP rate limit (10 per minute, 429) and a 16 KiB body cap (413). Rails returns 422 to every request (CSRF on, and the page never gets a token), so orders are never saved in production; the kiosk page never calls it either. Here same-origin requests (`Origin` = host, or `Sec-Fetch-Site: same-origin` without `Origin`) create the order with Rails' create logic and response; curl, cross-site and no-Origin requests get the same 422 page as Rails. Both headers can be spoofed by a non-browser client, which is why the limit and cap exist
 2. **Front-end tests.** Brief said Vitest; house rules and skateboard use `node --test`. Used `node --test` (BLOCKERS.md). Keep, or approve Vitest + a DOM library
 3. **Font.** Switched the kiosk page to Tailwind v3's system font stack so it looks like the Rails page, instead of skateboard's Geist. Keep parity or switch to Geist
 4. **Analytics.** Kept the legacy analytics tag (same host, site id and domain lock as the Rails page). House default for new apps is apex-analytics; moving is a separate call
@@ -65,7 +70,8 @@ The production cutover plan (host and service names, proxy settings, steps and r
 
 - `~/Projects/kiosk-rails-compare` (copy of the Rails app used for comparison)
 - Local images `kiosk-rails-compare:7c8be77`, `kiosk-skateboard:local`, `kiosk-skateboard:232ffb3`, `kiosk-skateboard:cfec801`. Test containers, the test volume and the dev backend were removed
-- Not mine, left running: container `qa-kiosk-gate3` (image `qa-kiosk:0d9316c`)
+- Not mine: container `qa-kiosk-gate3` (image `qa-kiosk:0d9316c`). Not touched; it was not in `docker ps -a` when the 0.7.0 work started
+- From 0.7.0: image `kiosk-gatefix:0.7.0`. Its test containers (`kiosk-gatefix-app`, `kiosk-gatefix-rails`), volume and build clone were removed
 
 ## Upgrade to 5.13.0
 
@@ -128,3 +134,70 @@ Done 2026-10-30, approved by Steve at 8:56 AM PT. Local only: no remote, no push
 - Pre-existing, not from the upgrade: the heading "Welcome to the Frankie Food Court Kiosk!" wraps at different words than Rails, because it uses `text-balance` (house rule). Same text and size. Keep it or match Rails' line breaks
 - Pre-existing, not from the upgrade: two menu clicks fired by a script in the same JS task add only the second item (the cart update reads state from before the first click). Real taps are separate events and work (the scripted scenario clicks one at a time and matches Rails). A functional state update would close it
 - On deploy, an existing volume's `Users` table gets the `subscription_id` column on first boot. Automatic and harmless (the table is empty)
+
+## QA gate fixes (0.7.0)
+
+Done 2026-10-30 from the QA gate brief plus Steve's update (9:09 to 9:11 AM PT). Zero crates; `Cargo.lock` unchanged since `3865711`.
+
+**Blocker 1: stack overflow on deep form keys (fixed)**
+
+- Cause: `params.rs` built nested form keys recursively with no depth limit. A 60 KB `POST /orders` with `items[a][a]...` 20,000 deep overflowed the stack (exit 139)
+- Fix: `params/form.rs` applies Rack's limits while scanning a key, before building anything: more than 32 levels (the name counts; a final `[]` does not) or more than 4096 pairs answers 400. The tree is built with a loop, not recursion. JSON keeps its 100-level cap (json gem `max_nesting`)
+- Limits and order captured from the Rails copy: depth 32 accepted (422 there, no token), 33 → 400; 4096 pairs accepted, 4097 → 400; the form is parsed before the browser (406) and Origin (422) checks
+- `params.rs` (576 lines) split into `params/mod.rs`, `json.rs`, `form.rs`, `cast.rs`
+- With the new 16 KiB cap, QA's 60 KB payload now stops at 413. A 6 KB payload nested 2,000 deep reaches the parser and gets 400
+
+**Blocker 2: base images newer than 7 days (fixed)**
+
+Rule: each digest first published on Docker Hub on or before 2026-10-23. All three are multi-arch indexes (`application/vnd.oci.image.index.v1+json`), checked against `registry-1.docker.io` (`Docker-Content-Digest` header and media type).
+
+| Stage | Pin | Version | First published |
+|---|---|---|---|
+| frontend | `node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4` | Node 24.22.0 (`NODE_VERSION`) | 2026-10-21 05:41 UTC |
+| backend | `rust:1.99.1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8` | Rust 1.99.1 (`RUST_VERSION`) | 2026-10-22, between 03:58 and 10:56 UTC |
+| runtime | `debian:bookworm-20261020-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8` | Debian 12, snapshot 20261020 | 2026-10-21 01:36 UTC |
+
+How the dates were found:
+
+- node: Docker Hub tags API, `24.22.0-bookworm-slim` → this digest, `tag_last_pushed` 2026-10-21T05:41:08Z; `docker-library/repo-info` history for that tag first records it at 2026-10-21T05:57Z (before that, `a5f4366e...`). amd64 config `created` 2026-10-21T00:50Z. Newest 24.x whose digest qualifies: 24.22.1 (Oct 28) and 24.22.2 (Oct 28) are too new
+- rust: no longer on any tag (Docker Hub now has `9181b56c...` for 1.99.1, pushed Oct 28). `docker-library/repo-info` history of `repos/rust/remote/1.99.1-bookworm.md`: first records `48b7f435...` in commit `9bb4ed9` (2026-10-22T10:56Z); the previous commit (`7c670d5`, 03:58Z) had `edaa2a8c...`; replaced on Oct 28 (`e9da6f6c...`). Still pullable by digest; amd64 config `created` 2026-10-21T21:51Z, `RUST_VERSION=1.99.1` (matches `RUSTUP_TOOLCHAIN=1.99.1` in the Dockerfile)
+- debian: Docker Hub tags API, dated tag `bookworm-20261020-slim` → this digest, `tag_last_pushed` 2026-10-21T01:36:39Z; repo-info first records it at 2026-10-21T02:56Z (an earlier build of the same tag, `eb37f586...`, was replaced). amd64 config `created` 2026-10-20T21:32Z
+- Docker Hub does not expose a "first seen" date per digest; `tag_last_pushed` plus repo-info history bound it from both sides
+
+**Blocker 3: `POST /orders` hardening (Steve chose keep-saving, not strict 422)**
+
+- Kept: same-origin requests save, as before. Everything else: Rails' 422 page
+- New: body over 16 KiB → 413 (`ORDER_BODY_MAX`, checked in the route; the server-wide 2 MiB read cap still applies first)
+- New: 10 `POST /orders` per minute per client IP, then 429 with `Retry-After` (`kiosk/limit.rs`, std `Mutex<HashMap>`, at most 50,000 IPs tracked). Every POST that passes the size cap counts, accepted or not. Client IP: `TRUST_PROXY` hops from the right of `X-Forwarded-For`, else the socket peer (the template's `client_ip`). In-memory: a restart clears it
+- Rails' check order is kept around them: 413, 429, form limits (400), old browser (406), foreign Origin (422), bad JSON (400), no same-origin (422), save
+
+**Cheap non-blockers**
+
+- `cargo fmt --check`: clean (`e17e8f6`). The vendored template was not fmt-clean upstream either (`~/Projects/skateboard` @ `f112fb7` has the same diffs), so the next `scripts/update-skateboard.js` merge may conflict on reformatted lines in `routes.rs`, `db.rs`, `stripe.rs` and others; take upstream's text and re-run `cargo fmt`
+- `cargo clippy --all-targets --locked -- -D warnings`: 0 warnings (13 fixed in vendored files, `8ef647c`; one `#[allow(clippy::upper_case_acronyms)]` per libcurl FFI type `CURL`)
+- `.env.example` and `docs/GUIDE.md`: Stripe placeholders are `rk_` (restricted keys)
+- CI (`.github/workflows/ci.yml`, not changed) uses floating action tags: `actions/checkout@v4`, `actions/setup-node@v4`, `dtolnay/rust-toolchain@stable`. Pin them to commit SHAs in a separate change if wanted
+
+**Verification**
+
+- `cargo test --locked`: 369 passed, 0 failed, 1 ignored (live Stripe). Was 342; +27 (form limits, JSON depth, limiter, route tests for 400/413/429/save)
+- `npm test` (`node --test`): 57 passed, 0 failed; typecheck and doc links ok
+- `cargo build --release --locked`: ok, binary 1,040,328 bytes
+- `git diff 3865711 -- backend/Cargo.lock`: empty (no root `Cargo.lock`)
+- `docker build --pull --platform linux/amd64` from a clean `git clone` of `284a655`: ok, image `kiosk-gatefix:0.7.0` (`sha256:60d1710d8f5f...`), 141,679,679 bytes
+- Container `kiosk-gatefix-app` (127.0.0.1:38210, named volume):
+  - QA's 60 KB payload, 20,000 deep, with `Origin` = host and `Sec-Fetch-Site: same-origin`: 413; with `Sec-Fetch-Site` only: 413
+  - 6 KB payload, 2,000 deep, `Origin` = host: 400
+  - 17 KB JSON, same origin: 413
+  - Afterwards: container `running`, 0 restarts; `/` 200, `/api/health` 200, `/menu_items` 200; no panic in the logs
+  - Spoofed `Origin` = host (JSON) and spoofed `Sec-Fetch-Site` (form): 201, saved (by design, decision 1); foreign Origin and no Origin: 422
+  - Rate limit: counted POSTs 1 to 10 accepted, 11th and later 429, `Retry-After: 60`
+  - DB copied out: 7 orders, exactly the 201s (2 spoofed + 5 from the rate-limit run); nothing from the 400/413/422/429 requests. `PRAGMA integrity_check` ok
+- Rails comparison (`scripts/parity/http-parity.sh`, Rails copy `kiosk-rails-compare:7c8be77` on 127.0.0.1:38081): 49 of 50 SAME, only `GET /api/health` differs (as before). Extra POST probes: see PARITY.md results
+
+**Open**
+
+- `TRUST_PROXY` must be set to the real hop count in production, or all kiosks share one order bucket (cutover plan)
+- Current proxy upstream for the kiosk: record before cutover
+- Rails also answers 400 to a deep form body on `GET /` (any method reads params); this app ignores GET bodies (200). Not a risk, not changed
+- No 413/429 page in Rails' style: they answer short `text/plain`. Rails never produced these statuses

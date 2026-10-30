@@ -14,6 +14,7 @@ Legend: `[ ]` to do, `[x]` built + tested + verified, `[-]` not ported on purpos
 - [x] `GET /menu_items.json` → same as above (Rails format suffix)
 - [x] `POST /orders` → `OrdersController#create`: `Order.create!(total:, items:)`, 201 `{"message":"Order created successfully","order_id":<id>}`, any error 422 `{"error":"<message>"}`
 - [x] `POST /orders` CSRF: `ActionController::Base` default `protect_from_forgery` rejects a POST without a valid token (422 HTML). `kiosk.html` is rendered without the layout, so no token is ever issued: in production every POST /orders fails. Confirm against a local Rails copy
+- [x] `POST /orders` param limits (captured 2026-10-30 from the Rails copy): Rack rejects a form key nested past 32 levels (the name counts; a final `[]` does not) or more than 4096 pairs with 400, and does so in `Rack::MethodOverride`, before `allow_browser` (406) and the CSRF check (422). A foreign `Origin` is 422 before the JSON body is read; with no `Origin`, bad JSON is 400. A query string past the limits is ignored (422). The Rust app matches all of these
 - [x] `/up` health: NOT routed in Rails (commented out). Live `GET /up` → 404 HTML. `production.rb` still names `/up` in `silence_healthcheck_path`. Rust app keeps `/up` → 404 parity and adds skateboard `GET /api/health` for the container health check
 - [x] Unknown path → 404 with `public/404.html` body (`text/html; charset=UTF-8`)
 - [-] `/cable` (Action Cable default mount, live 404 text/plain): no channels, no consumer JS. Not ported
@@ -113,9 +114,11 @@ How each item was checked:
 
 Re-checked after the update to skateboard 5.13.0 / skateboard-ui 5.11.0 (`cfec801`): same results. 49 of 50 HTTP checks match (only `/api/health`), the scripted page run matches, data survives a restart. Details in REPORT.md, "Upgrade to 5.13.0"
 
+Re-checked for the QA gate fixes (0.7.0, `kiosk-gatefix:0.7.0` vs the Rails copy, both local): 49 of 50 HTTP checks match (only `/api/health`). Ten extra `POST /orders` probes (form depth 32 / 33 / 41 / 2001, foreign Origin, old Chrome, bad JSON with and without Origin) match Rails status for status, except the three deliberate ones: QA's 60 KB payload is 413 (Rails 400), a 17 KB body is 413 (Rails 422), a spoofed same-origin JSON order is 201 (Rails 422)
+
 Differences on purpose (details and Steve's decisions in REPORT.md):
 
-- `POST /orders`: Rails rejects every request (CSRF, no token is ever issued). Here a same-origin browser request is accepted; everything else gets the same 422 page
+- `POST /orders`: Rails rejects every request (CSRF, no token is ever issued). Here a same-origin browser request (`Origin` = host, or `Sec-Fetch-Site: same-origin`) is saved, a deliberate difference Steve approved on 2026-10-30 (REPORT.md decision 1); everything else gets the same 422 page. Not in Rails either: a body over 16 KiB is 413 and an 11th POST in a minute from one IP is 429
 - `GET /api/health`: added for the container health check (Rails: 404)
 - Headers: skateboard's security headers (`X-Frame-Options: DENY`, CSP with the analytics host, HSTS 1 year + preload) instead of Rails' (`SAMEORIGIN`, no CSP, HSTS 2 years). `Cache-Control` and weak `ETag`/304 match Rails' shape; ETag values differ (sha256 vs md5)
 - `/kiosk.html` is not cached for a year (Rails: `public, max-age=31556952`), so a deploy is never hidden behind a stale page
