@@ -9,7 +9,7 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 - Scripted browser run on both apps: identical totals, visibility and saved cart at every step
 - Tests: 337 Rust passed (279 template + 58 kiosk), 1 ignored (template live-Stripe test); 57 front-end passed (25 kiosk + 32 template). 0 failed
 - `cargo build --release --locked`: ok (binary 1.0 MB). `[dependencies]` empty; `Cargo.lock` holds only `skateboard-backend`
-- `docker build --pull`: ok. Image 142 MB (36 MB gzipped) vs Rails image 817 MB. Idle memory 7 MB vs 135 MB (Rails), same machine
+- `docker build --pull`: ok from a clean `git archive` of `232ffb3`, image `kiosk-skateboard:232ffb3` (`sha256:1fc1d4b9161a...`), 141,648,913 bytes (142 MB, 36 MB gzipped) vs Rails image 817 MB. Smoke run: `/` 200, `/menu_items` 19 items. Idle memory 7 MB vs 135 MB (Rails), same machine
 - No new crates or npm packages. One stop recorded in BLOCKERS.md (Vitest)
 
 ## Commits (author Steve Derico, GitHub noreply address)
@@ -20,7 +20,8 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 | `7f36150` | Scaffold with create-skateboard-app 2.1.1 (skateboard 5.10.0) |
 | `91e16d7` | Rust kiosk routes, schema, seeds, Rails encodings |
 | `5f7405f` | React kiosk page on the skateboard shell |
-| next commits | Dockerfile, docs, parity scripts, this report (see `git log`) |
+| `232ffb3` | Dockerfile, parity scripts, docs, this report |
+| next | Image ID recorded in this report |
 
 ## How it was verified
 
@@ -61,4 +62,4 @@ The production cutover plan (host and service names, proxy settings, steps and r
 ## Leftovers on this machine
 
 - `~/Projects/kiosk-rails-compare` (copy of the Rails app used for comparison)
-- Local images `kiosk-rails-compare:7c8be77`, `kiosk-skateboard:local`; containers and the test volume are removed at the end of the run
+- Local images `kiosk-rails-compare:7c8be77`, `kiosk-skateboard:local`, `kiosk-skateboard:232ffb3`. Test containers, the test volume and the dev backend were removed
