@@ -49,13 +49,7 @@ fn dispatch(state: &AppState, req: &Request) -> Response {
         ("POST", "/api/usage") => usage(state, req),
         ("POST", "/api/checkout") => checkout(state, req),
         ("POST", "/api/portal") => portal(state, req),
-        (m, p) if p.starts_with("/api/") => {
-            if m == "GET" || m == "HEAD" {
-                not_found()
-            } else {
-                not_found()
-            }
-        }
+        (_, p) if p.starts_with("/api/") => not_found(),
         ("GET" | "HEAD", _) => static_or_spa(state, req),
         _ => not_found(),
     }

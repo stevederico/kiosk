@@ -351,6 +351,11 @@ impl RateLimitStore {
         self.lock().len()
     }
 
+    /// Whether no IP is tracked.
+    pub fn is_empty(&self) -> bool {
+        self.lock().is_empty()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Vec<i64>>> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }

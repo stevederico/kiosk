@@ -28,8 +28,10 @@ fn main() {
 
     spawn_cleanup(Arc::clone(&state));
 
-    let mut cfg = http::Config::default();
-    cfg.port = state.port;
+    let cfg = http::Config {
+        port: state.port,
+        ..Default::default()
+    };
     let st = Arc::clone(&state);
     let server = match http::serve(cfg, move |req| kiosk::handle(&st, req)) {
         Ok(s) => s,

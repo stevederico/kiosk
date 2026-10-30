@@ -364,8 +364,10 @@ pub fn scrypt(
     // B = PBKDF2(P, S, 1, p * 128 * r)
     let b_init = pbkdf2_hmac_sha256(password, salt, 1, b_bytes);
     let mut b: Vec<u32> = b_init
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
 
     let mut v = vec![0u32; v_words];

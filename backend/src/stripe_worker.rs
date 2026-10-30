@@ -284,8 +284,10 @@ mod tests {
 
     #[test]
     fn worker_answers_serialized_calls() {
-        let mut mock = StripeMock::default();
-        mock.delay_ms = 20;
+        let mut mock = StripeMock {
+            delay_ms: 20,
+            ..Default::default()
+        };
         mock.prices.insert("a".into(), "price_a".into());
         mock.prices.insert("b".into(), "price_b".into());
         let worker = std::sync::Arc::new(StripeWorker::spawn(StripeClient::with_mock(mock)));
@@ -301,8 +303,10 @@ mod tests {
 
     #[test]
     fn worker_rejects_when_queue_is_full() {
-        let mut mock = StripeMock::default();
-        mock.delay_ms = 250;
+        let mut mock = StripeMock {
+            delay_ms: 250,
+            ..Default::default()
+        };
         mock.prices.insert("k".into(), "price_k".into());
         let worker = std::sync::Arc::new(StripeWorker::spawn(StripeClient::with_mock(mock)));
         let mut joins = Vec::new();
@@ -319,8 +323,10 @@ mod tests {
 
     #[test]
     fn worker_drops_jobs_that_missed_their_deadline() {
-        let mut mock = StripeMock::default();
-        mock.delay_ms = 250;
+        let mut mock = StripeMock {
+            delay_ms: 250,
+            ..Default::default()
+        };
         mock.prices.insert("a".into(), "price_a".into());
         mock.prices.insert("b".into(), "price_b".into());
         let calls = std::sync::Arc::clone(&mock.call_count);

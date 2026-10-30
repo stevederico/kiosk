@@ -919,6 +919,7 @@ struct HttpResponse {
 
 /// Opaque libcurl easy handle.
 #[repr(C)]
+#[allow(clippy::upper_case_acronyms)] // libcurl's C type name
 struct CURL {
     _private: [u8; 0],
 }

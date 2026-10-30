@@ -1236,7 +1236,7 @@ impl Pool {
         let (clause, param) = q.clause();
         let sql = format!("SELECT * FROM Users WHERE {clause}");
         self.with(|db| {
-            let rows = db.query(&sql, &[param.clone()])?;
+            let rows = db.query(&sql, std::slice::from_ref(&param))?;
             Ok(rows.first().and_then(user_from_row))
         })
     }
@@ -1420,7 +1420,7 @@ impl Pool {
         let (clause, param) = q.clause();
         let sql = format!("DELETE FROM Users WHERE {clause}");
         self.with(|db| {
-            let changes = db.run(&sql, &[param.clone()])?;
+            let changes = db.run(&sql, std::slice::from_ref(&param))?;
             Ok(changes.changes.max(0) as u64)
         })
     }

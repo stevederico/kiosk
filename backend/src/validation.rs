@@ -105,7 +105,7 @@ fn valid_domain_label(label: &str) -> bool {
 /// existing accounts keep working unchanged.
 pub fn validate_password(password: &str) -> bool {
     let len = utf16_len(password);
-    !password.is_empty() && len >= 6 && len <= 72
+    !password.is_empty() && (6..=72).contains(&len)
 }
 
 /// Validate a display name: non-empty after trimming, ≤ 100 code units.
