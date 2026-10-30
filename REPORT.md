@@ -199,6 +199,6 @@ How the dates were found:
 
 - `TRUST_PROXY` must be set to the real hop count in production, or all kiosks share one order bucket (cutover plan)
 - Current proxy upstream for the kiosk: record before cutover
-- Not published: `stevederico/kiosk` is archived (pushes are refused) and public, and this report names internal infra. Steve chose to skip the publish on 2026-10-30. Planned procedure when unblocked: branch `rails` at the old master `7c8be77`, a `git commit-tree` merge of `7c8be77` and this `master` with this tree, fast-forward push of `master`, annotated tag `0.7.0` on the merge. No tag was created locally, so it can go on that merge commit
+- Not published: `stevederico/kiosk` is archived (pushes are refused) and public, and this report names internal infra. Publish held on 2026-10-30 pending Steve's decision (repo is archived and public); not yet decided by Steve. Planned procedure when unblocked: branch `rails` at the old master `7c8be77`, a `git commit-tree` merge of `7c8be77` and this `master` with this tree, fast-forward push of `master`, annotated tag `0.7.0` on the merge. No tag was created locally, so it can go on that merge commit
 - Rails also answers 400 to a deep form body on `GET /` (any method reads params); this app ignores GET bodies (200). Not a risk, not changed
 - No 413/429 page in Rails' style: they answer short `text/plain`. Rails never produced these statuses
