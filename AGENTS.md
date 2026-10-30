@@ -5,7 +5,7 @@ This file is the source of truth; `CLAUDE.md` is a symlink to it.
 
 ## This App: Kiosk
 
-Rewrite of the Rails kiosk (`~/Projects/kiosk`, read-only reference) on skateboard 5.10.0. Parity with the Rails app is the spec: [PARITY.md](PARITY.md), results in [REPORT.md](REPORT.md).
+Rewrite of the Rails kiosk (`~/Projects/kiosk`, read-only reference) on skateboard 5.13.0 (skateboard-ui 5.11.0). Parity with the Rails app is the spec: [PARITY.md](PARITY.md), results in [REPORT.md](REPORT.md).
 
 - Backend entry: `backend/src/main.rs` calls `kiosk::prepare` (schema + seed) and serves `kiosk::handle`
 - `backend/src/kiosk/`: `mod.rs` routes, `store.rs` schema/seeds/queries, `encode.rs` Rails JSON/time/decimal formats, `params.rs` Rails params, `browser.rs` `allow_browser :modern`, `tests.rs` route tests
@@ -664,8 +664,8 @@ Canonical pins live in this repo’s `package.json` (`version` / `skateboardVers
 **Reference:** [docs/GUIDE.md](docs/GUIDE.md) - Architecture, API, Schema, Deployment, Migration (consolidated)
 
 **Version:**
-- skateboard@5.10.0
-- skateboard-ui@5.4.0
+- skateboard@5.13.0
+- skateboard-ui@5.11.0
 
 ## Migrating 4.x → 5.0 (exact checklist)
 

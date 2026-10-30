@@ -1,5 +1,11 @@
 # Changelog
 
+0.6.0
+
+  Skateboard 5.13.0
+  Skateboard-ui 5.11.0
+  Webhook subscription fixes
+
 0.5.0
 
   Rewrite on skateboard
