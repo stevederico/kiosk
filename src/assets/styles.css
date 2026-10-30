@@ -1,0 +1,12 @@
+/* Base theme + Tailwind source globs come from the shell package. */
+@import "@stevederico/skateboard-ui/styles.css";
+
+@theme {
+  /* Brand accent: every `*-app` utility (bg-app, text-app, ring-app) resolves to this. */
+  --color-app: var(--color-red-500);
+}
+
+.dark {
+  --card: #0d0d0d;
+  --accent: #111111;
+}
