@@ -28,7 +28,10 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 | `8ef647c` | Clippy fixes in the vendored template |
 | `e17e8f6` | `cargo fmt` |
 | `284a655` | 0.7.0: base images 7+ days old, docs, `rk_` placeholders |
-| next | PARITY.md and REPORT.md results for 0.7.0 |
+| `3f12ed1` | PARITY.md and REPORT.md results for 0.7.0 |
+| `dc5dbb1`, `b9b40ce` | REPORT.md: publish not done; held pending Steve's decision |
+| `0887064` | 0.7.1: every X-Forwarded-For line joined before `TRUST_PROXY` |
+| next | REPORT.md: production proxy findings, cutover settings, node 24.22.1 |
 
 ## How it was verified
 
@@ -59,10 +62,10 @@ The production cutover plan (host and service names, proxy settings, steps and r
 
 ## Unknown (not checked)
 
-- Production service names, the exact running image tag and its env var names: not read, production was out of scope
 - Whether anything besides the page calls `POST /orders` (it always fails in production today, so likely nothing)
 - Whether real kiosk hardware runs a browser older than Chrome 120 / Safari 17.2 (both apps answer 406)
 - CDN cache or WAF rules specific to kiosk.bixbyapps.com
+- The XFF chain above is inferred from the proxy setup, not observed on the wire
 - Running in place on port 80 as uid 999 (not tested on the host)
 - A bind mount owned 999:999 was not tested here (a named Docker volume was); the uid inside the image is 999
 
@@ -71,7 +74,7 @@ The production cutover plan (host and service names, proxy settings, steps and r
 - `~/Projects/kiosk-rails-compare` (copy of the Rails app used for comparison)
 - Local images `kiosk-rails-compare:7c8be77`, `kiosk-skateboard:local`, `kiosk-skateboard:232ffb3`, `kiosk-skateboard:cfec801`. Test containers, the test volume and the dev backend were removed
 - Not mine: container `qa-kiosk-gate3` (image `qa-kiosk:0d9316c`). Not touched; it was not in `docker ps -a` when the 0.7.0 work started
-- From 0.7.0: image `kiosk-gatefix:0.7.0`. Its test containers (`kiosk-gatefix-app`, `kiosk-gatefix-rails`), volume and build clone were removed
+- From 0.7.0 / 0.7.1: images `kiosk-gatefix:0.7.0`, `kiosk-gatefix:0.7.1`. Their test containers (`kiosk-gatefix-app`, `kiosk-gatefix-rails`, `kiosk-gatefix-xff`), volume and build clones were removed
 
 ## Upgrade to 5.13.0
 
@@ -161,7 +164,7 @@ How the dates were found:
 
 - node: Docker Hub tags API, `24.22.0-bookworm-slim` → this digest, `tag_last_pushed` 2026-10-21T05:41:08Z; `docker-library/repo-info` history for that tag first records it at 2026-10-21T05:57Z (before that, `a5f4366e...`). amd64 config `created` 2026-10-21T00:50Z. Newest 24.x whose digest qualifies: 24.22.1 (Oct 28) and 24.22.2 (Oct 28) are too new
 - rust: no longer on any tag (Docker Hub now has `9181b56c...` for 1.99.1, pushed Oct 28). `docker-library/repo-info` history of `repos/rust/remote/1.99.1-bookworm.md`: first records `48b7f435...` in commit `9bb4ed9` (2026-10-22T10:56Z); the previous commit (`7c670d5`, 03:58Z) had `edaa2a8c...`; replaced on Oct 28 (`e9da6f6c...`). Still pullable by digest; amd64 config `created` 2026-10-21T21:51Z, `RUST_VERSION=1.99.1` (matches `RUSTUP_TOOLCHAIN=1.99.1` in the Dockerfile)
-- debian: Docker Hub tags API, dated tag `bookworm-20261020-slim` → this digest, `tag_last_pushed` 2026-10-21T01:36:39Z; repo-info first records it at 2026-10-21T02:56Z (an earlier build of the same tag, `eb37f586...`, was replaced). amd64 config `created` 2026-10-20T21:32Z
+- debian: Docker Hub tags API, dated tag `bookworm-20261020-slim` → this digest, `tag_last_pushed` 2026-10-21T01:36:39Z; repo-info first records it at 2026-10-21T02:56Z (the entry before it, `eb37f586...`, is an empty index with no platforms that repo-info records for builds still in progress; the same digest appears in node's history). amd64 config `created` 2026-10-20T21:32Z
 - Docker Hub does not expose a "first seen" date per digest; `tag_last_pushed` plus repo-info history bound it from both sides
 
 **Blocker 3: `POST /orders` hardening (Steve chose keep-saving, not strict 422)**
@@ -202,3 +205,23 @@ How the dates were found:
 - Not published: `stevederico/kiosk` is archived (pushes are refused) and public, and this report names internal infra. Publish held on 2026-10-30 pending Steve's decision (repo is archived and public); not yet decided by Steve. Planned procedure when unblocked: branch `rails` at the old master `7c8be77`, a `git commit-tree` merge of `7c8be77` and this `master` with this tree, fast-forward push of `master`, annotated tag `0.7.0` on the merge. No tag was created locally, so it can go on that merge commit
 - Rails also answers 400 to a deep form body on `GET /` (any method reads params); this app ignores GET bodies (200). Not a risk, not changed
 - No 413/429 page in Rails' style: they answer short `text/plain`. Rails never produced these statuses
+
+## Pre-cutover prep (0.7.1)
+
+Done 2026-10-30 after QA re-gated `b9b40ce` (PASS with conditions). Local, plus read-only checks on the production host; nothing pushed, deployed or changed there.
+
+**X-Forwarded-For with several lines (fixed in 0.7.1, `0887064`)**
+
+- `client_ip` read only the first `X-Forwarded-For` line. A client could put its own line first and the proxy's line second and get a fresh bucket each time (QA: 13 of 13 `POST /orders` saved)
+- Now every line is joined in order (RFC 7230 §3.2.2) before `TRUST_PROXY` hops are counted from the right. Applies to the order limit and the template's auth rate limit and lockout keys (`routes::client_ip_for`)
+- Tests: 7 new (multi-line join, hop selection across lines, empty lines, no `TRUST_PROXY`, auth limit with a second line, order limit with a second line, order key with `TRUST_PROXY=2`). 5 of them fail on the old first-line-only code
+- `cargo test --locked`: 376 passed, 0 failed, 1 ignored. `npm test` (`node --test`): 57 passed. Clippy `-D warnings`: 0. `cargo fmt --check`: clean. `cargo build --release --locked`: ok. `Cargo.lock` unchanged
+- Image `kiosk-gatefix:0.7.1` (`docker build --pull` from a clean clone, `sha256:78b03c15ace7...`, 141,679,354 bytes) with `TRUST_PROXY=1`: 13 POSTs, each with a new first XFF line and the same second line: 10 × 201, then 429. A different second line: 201
+
+**Hop count and port exposure:** `TRUST_PROXY=2`, no published ports, internal network only, rollback value recorded (details in the internal cutover notes).
+
+**node 24.22.1 (not bumped)**
+
+- Security release, 2026-10-21 ([release notes](https://nodejs.org/en/blog/release/v24.22.1)). High: CVE-2026-106069 and CVE-2026-106072 (TLS rejects non-canonical IP addresses), CVE-2026-105482 (DNS resolve inputs with null bytes), CVE-2026-105483 (TLS IP normalization regression), CVE-2026-111497 (Brotli decoder out-of-bounds write). Medium: CVE-2026-105481 (HTTP agent data guard), CVE-2026-106074 (crypto random caches across snapshots). Low: CVE-2026-106073 (permission model in `realpathSync`). Also OpenSSL 3.5.9, c-ares 1.34.9, undici 7.30.1, tzdata 2026e
+- Effect here: low. Node runs only in the `frontend` build stage (`npm ci --ignore-scripts`, `vite build`); the runtime image is the Rust binary on debian slim with no Node. The build talks only to registry.npmjs.org by hostname (not an IP literal), uses no permission model, no snapshots, no Node server. The Brotli and HTTP-agent fixes matter most for a build that downloads packages, and npm verifies every tarball against `package-lock.json` integrity hashes
+- 7-day rule: the current `24.22.1-bookworm-slim` digest (`be8204d4...`) is from Oct 28 (too new), but its first builds are older. `node@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205` (OCI index, `NODE_VERSION=24.22.1`, amd64 config created 2026-10-21T11:35Z) was first recorded by docker-library/repo-info at 2026-10-21T17:56Z, which meets the rule. Not pinned (brief: report only). It is the candidate for the next bump
