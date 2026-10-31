@@ -1,72 +1,62 @@
-# syntax=docker/dockerfile:1
-# check=error=true
+# Base images are pinned by multi-arch index digest (tag kept for
+# readability). Each digest must have been first published on Docker Hub at
+# least 7 days before it is pinned (supply-chain rule; see REPORT.md
+# "Base images" for how the dates were checked). Look up a candidate with
+# hub.docker.com/v2/repositories/library/<repo>/tags (`digest`,
+# `tag_last_pushed`) and docker-library/repo-info history, never `docker pull`
+# of a floating tag.
+FROM node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4 AS frontend
 
-# This Dockerfile is designed for production, not development. Use with Kamal or build'n'run by hand:
-# docker build -t kiosk .
-# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name kiosk kiosk
-
-# For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
-
-# Make sure RUBY_VERSION matches the Ruby version in .ruby-version
-ARG RUBY_VERSION=3.4.5
-FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
-
-# Rails app lives here
-WORKDIR /rails
-
-# Install base packages
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y curl libjemalloc2 libvips sqlite3 && \
-    rm -rf /var/lib/apt/lists /var/cache/apt/archives
-
-# Set production environment
-ENV RAILS_ENV="production" \
-    BUNDLE_DEPLOYMENT="1" \
-    BUNDLE_PATH="/usr/local/bundle" \
-    BUNDLE_WITHOUT="development"
-
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build gems
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential git libyaml-dev pkg-config && \
-    rm -rf /var/lib/apt/lists /var/cache/apt/archives
-
-# Install application gems
-COPY Gemfile Gemfile.lock ./
-RUN bundle install && \
-    rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
-    bundle exec bootsnap precompile --gemfile
-
-# Copy application code
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 COPY . .
+RUN if find /app \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -print -quit | grep -q .; then \
+      echo 'FATAL: .env file present in Docker build context — aborting'; \
+      find /app \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -print; \
+      exit 1; \
+    fi
+RUN npm run build
 
-# Precompile bootsnap code for faster boot times
-RUN bundle exec bootsnap precompile app/ lib/
+FROM rust:1.99.1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS backend
 
-# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+# Use the image's pinned toolchain; rust-toolchain.toml says "stable", which
+# would otherwise make rustup download whatever stable is current.
+ENV RUSTUP_TOOLCHAIN=1.99.1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libsqlite3-dev libcurl4-openssl-dev pkg-config ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY backend/rust-toolchain.toml backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo build --release --locked
 
+FROM debian:bookworm-20261020-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libsqlite3-0 libcurl4 ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --home /app --shell /usr/sbin/nologin skateboard
 
+WORKDIR /app
+COPY --from=frontend /app/dist ./dist
+COPY --from=backend /build/target/release/skateboard-backend /usr/local/bin/skateboard-backend
+COPY backend/config.json ./backend/config.json
+# Checkout and the webhook read the plan list (stripeProducts) from here.
+COPY src/constants.json ./src/constants.json
 
-# Final stage for app image
-FROM base
+# SQLite lives in /app/backend/databases (Kiosk.db). Mount a volume there in
+# production; the image itself never holds data. Empty on first boot: the app
+# creates the schema and seeds the menu.
+RUN mkdir -p /app/backend/databases \
+    && chown -R skateboard:skateboard /app
 
-# Copy built artifacts: gems, application
-COPY --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
-COPY --from=build /rails /rails
+USER skateboard
+ENV NODE_ENV=production
+ENV SKATEBOARD_BACKEND_DIR=/app/backend
+EXPOSE 8000
 
-# Run and own only the runtime files as a non-root user for security
-RUN groupadd --system --gid 1000 rails && \
-    useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash && \
-    chown -R rails:rails db log storage tmp
-USER 1000:1000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/api/health >/dev/null || exit 1
 
-# Entrypoint prepares the database.
-ENTRYPOINT ["/rails/bin/docker-entrypoint"]
-
-# Start server via Thruster by default, this can be overwritten at runtime
-EXPOSE 80
-CMD ["./bin/thrust", "./bin/rails", "server"]
+CMD ["skateboard-backend"]

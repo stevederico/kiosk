@@ -1,51 +1,46 @@
-# See https://docs.docker.com/engine/reference/builder/#dockerignore-file for more about ignoring files.
+# Deno
+deno.lock
+deno.json
+deno.jsonc
+.deno/
 
-# Ignore git directory.
-/.git/
-/.gitignore
+# Node
+node_modules/
+npm-debug.log*
 
-# Ignore bundler config.
-/.bundle
+# Git
+.git/
+.gitignore
 
-# Ignore all environment files.
-/.env*
+# IDE
+.vscode/
+.idea/
 
-# Ignore all default key files.
-/config/master.key
-/config/credentials/*.key
+# Environment — never bake secrets (symlinks to shared secret files are the classic leak)
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 
-# Ignore all logfiles and tempfiles.
-/log/*
-/tmp/*
-!/log/.keep
-!/tmp/.keep
+# Build artifacts
+dist/
+build/
+backend/coverage/
+backend/target/
 
-# Ignore pidfiles, but keep the directory.
-/tmp/pids/*
-!/tmp/pids/.keep
+# Local data — never bake into railway up images
+backend/databases/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+uploads/
+**/uploads/
 
-# Ignore storage (uploaded files in development and any SQLite databases).
-/storage/*
-!/storage/.keep
-/tmp/storage/*
-!/tmp/storage/.keep
-
-# Ignore assets.
-/node_modules/
-/app/assets/builds/*
-!/app/assets/builds/.keep
-/public/assets
-
-# Ignore CI service files.
-/.github
-
-# Ignore Kamal files.
-/config/deploy*.yml
-/.kamal
-
-# Ignore development files
-/.devcontainer
-
-# Ignore Docker-related files
-/.dockerignore
-/Dockerfile*
+# Misc
+*.md
+*.log
+.DS_Store

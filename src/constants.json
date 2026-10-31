@@ -1,0 +1,61 @@
+{
+    "version": "0.7.3",
+    "design": {
+        "baseColor": "neutral",
+        "radius": "medium",
+        "font": "geist",
+        "iconLibrary": "lucide"
+    },
+    "appName": "Kiosk",
+    "appIcon": "utensils",
+    "tagline": "Frankie Food Court Kiosk",
+    "cta": "Get Started",
+    "ctaHeading": "Ready to Get Started?",
+    "noLogin": true,
+    "authOverlay": false,
+    "sidebarCollapsed": false,
+    "features": {
+        "title": "Food Court Kiosk",
+        "items": [
+            {
+                "icon": "utensils",
+                "title": "Self-Service Ordering",
+                "description": "Tap items to build an order, then pay at the PIN pad"
+            }
+        ]
+    },
+    "backendURL": "/api",
+    "devBackendURL": "http://localhost:8000/api",
+    "pages": [],
+    "stripeProducts": [],
+    "pricing": {
+        "title": "Simple, Transparent Pricing",
+        "extras": [
+            "Priority Customer Support",
+            "Cancel Anytime"
+        ]
+    },
+    "navLinks": [],
+    "footerLinks": [
+        {
+            "label": "Privacy",
+            "href": "/privacy"
+        },
+        {
+            "label": "Terms",
+            "href": "/terms"
+        },
+        {
+            "label": "EULA",
+            "href": "/eula"
+        }
+    ],
+    "copyrightText": "All rights reserved.",
+    "companyName": "Bixby Apps",
+    "companyWebsite": "kiosk.bixbyapps.com",
+    "companyEmail": "support@company.com",
+    "hasTermsOfService": true,
+    "hasPrivacyPolicy": true,
+    "hasEULA": true,
+    "hasSubscriptionDetails": true
+}

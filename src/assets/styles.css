@@ -1,0 +1,48 @@
+/* Base theme + Tailwind source globs come from the shell package. */
+@import "@stevederico/skateboard-ui/styles.css";
+
+@theme {
+  /* Brand accent: every `*-app` utility (bg-app, text-app, ring-app) resolves to this. */
+  --color-app: var(--color-red-500);
+
+  /*
+   * Kiosk palette. The Rails page used the Tailwind v3 CDN defaults; these are
+   * those exact values, named for their role so the views never use raw colors.
+   */
+  --color-kiosk-backdrop: #4b5563;
+  --color-kiosk-surface: #ffffff;
+  --color-kiosk-ink: #000000;
+  --color-kiosk-muted: #4b5563;
+  --color-kiosk-name: #1f2937;
+  --color-kiosk-hint: #f3f4f6;
+  --color-kiosk-row-hover: #f9fafb;
+  --color-kiosk-rule: #e5e7eb;
+  --color-kiosk-primary: #3b82f6;
+  --color-kiosk-primary-hover: #2563eb;
+  --color-kiosk-confirm: #16a34a;
+  --color-kiosk-confirm-hover: #15803d;
+  --color-kiosk-accept: #22c55e;
+  --color-kiosk-accept-hover: #16a34a;
+  --color-kiosk-placeholder: #e5e7eb;
+  --color-kiosk-placeholder-ink: #6b7280;
+  --color-kiosk-thumb: #fed7aa;
+  --color-kiosk-thumb-ink: #ea580c;
+  --color-kiosk-on-primary: #ffffff;
+
+  /* Tailwind v3's default sans stack, which the Rails page rendered in. */
+  --font-kiosk: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Menu tile offset shadow from the Rails page. */
+  --drop-shadow-kiosk-tile: 4px 4px 0 rgb(0 0 0 / 0.75);
+}
+
+/* The quantity dialog dims the screen like the Rails modal (black at 50%). */
+dialog:has(.kiosk-dialog)::backdrop {
+  background: rgb(0 0 0 / 0.5);
+  backdrop-filter: none;
+}
+
+.dark {
+  --card: #0d0d0d;
+  --accent: #111111;
+}
