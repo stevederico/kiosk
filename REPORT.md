@@ -75,7 +75,7 @@ What reaches the app, hop by hop, in the current setup:
 | unset / `0` | The inner proxy's address: every visitor shares one bucket (10 orders per minute site-wide) |
 | `1` | The edge proxy's internal address: same, one shared bucket |
 | **`2`** | **CDN edge IP.** Not client-controlled (the edge proxy drops client XFF; only the CDN reaches the host). Coarse: visitors who reach the same CDN edge address share a bucket. For kiosks in one food court they share a NAT address anyway |
-| `3` | Chain too short, falls back to the peer: one shared bucket. Wrong today |
+| `3` | Client IP once the edge proxy trusts the CDN's ranges (below). A request that skips the CDN arrives as `<sender>, <edge proxy IP>`, shorter than 3: it keys on the leftmost entry, the sender the edge proxy appended, so each sender has its own bucket. Safe only because the edge proxy drops client-sent `X-Forwarded-For` from untrusted senders |
 
 For a per-visitor key: make the edge proxy trust forwarded headers from the CDN's address ranges. It then keeps the CDN's header and appends the edge address, the app sees `[client junk, ]<client IP>, <CDN edge IP>, <edge proxy IP>`, and `TRUST_PROXY=3` gives the client IP. That is a proxy change outside this app (Steve's call; not done). Not verified on the wire
 

@@ -166,7 +166,8 @@ fn menu(state: &AppState, req: &Request) -> Response {
 /// (406) or a foreign origin (422).
 ///
 /// `client_ip` keys the limit: [`routes::client_ip`], every
-/// `X-Forwarded-For` line joined, `TRUST_PROXY` hops from the right.
+/// `X-Forwarded-For` line joined, `TRUST_PROXY` hops from the right (the
+/// leftmost entry of a shorter chain).
 fn post_orders(state: &AppState, req: &Request, client_ip: &str) -> Response {
     if req.body.len() > ORDER_BODY_MAX {
         return Response::text(413, "Payload Too Large");

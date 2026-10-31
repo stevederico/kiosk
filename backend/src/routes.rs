@@ -1440,14 +1440,24 @@ pub fn run_lockout_cleanup(state: &AppState) {
 /// proxies in front of this process (`TRUST_PROXY=1` for a single proxy such as
 /// Railway); set it only when every one of those hops is trusted.
 ///
-/// Proxies **append** to `X-Forwarded-For`, so the leftmost entry is whatever
-/// the client sent and must never be trusted — rotating it would mint a fresh
-/// rate-limit and lockout bucket per request. Index `hops` from the right
-/// instead: with one trusted proxy that is the address it observed.
+/// Proxies **append** to `X-Forwarded-For`, so in a full chain the leftmost
+/// entries are whatever the client sent and must never be trusted — rotating
+/// them would mint a fresh rate-limit and lockout bucket per request. Index
+/// `hops` from the right instead: with one trusted proxy that is the address
+/// it observed.
 ///
-/// Falls back to `peer_ip` when the header is absent or carries fewer entries
-/// than `hops` (a spoofed-short chain then shares the proxy's bucket rather
-/// than escaping into one of its own).
+/// A chain shorter than `hops` (but not empty) keys on its leftmost entry.
+/// That happens when a request skips an outer hop, e.g. reaches the origin
+/// without the CDN: the first proxy it does pass appended the real sender, so
+/// each sender gets its own bucket instead of all of them sharing the
+/// socket peer's (the inner proxy, the same for every request). The leftmost
+/// entry is only trustworthy because that first proxy drops `X-Forwarded-For`
+/// from untrusted senders before appending; if an outer hop can be bypassed
+/// to a proxy that keeps a client-sent header, the leftmost entry is
+/// client-controlled and a short chain can pick its own bucket.
+///
+/// Falls back to `peer_ip` when the header is absent or has no non-blank
+/// entry.
 pub(crate) fn client_ip(req: &Request) -> String {
     let hops = config::env("TRUST_PROXY")
         .and_then(|v| v.trim().parse::<usize>().ok())
@@ -1468,7 +1478,9 @@ pub(crate) fn client_ip_for(req: &Request, hops: usize) -> String {
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .collect();
-        if let Some(ip) = chain.len().checked_sub(hops).and_then(|i| chain.get(i)) {
+        // Short chain: leftmost entry (see `client_ip`); empty: the peer.
+        let index = chain.len().saturating_sub(hops);
+        if let Some(ip) = chain.get(index) {
             return (*ip).to_string();
         }
     }
@@ -2122,6 +2134,98 @@ mod tests {
         assert_eq!(client_ip_for(&req, 0), "10.0.0.1");
     }
 
+    // TRUST_PROXY=3 behind CDN -> edge proxy -> inner proxy. Documentation
+    // addresses: the inner proxy is the socket peer of every request, the
+    // edge proxy is the address the inner proxy appends.
+    const INNER_PEER: &str = "192.0.2.10";
+    const EDGE: &str = "192.0.2.4";
+    const CDN: &str = "198.51.100.7";
+    const CLIENT: &str = "203.0.113.5";
+
+    fn key3(lines: &[&str]) -> String {
+        let ip = client_ip_for(&forwarded(INNER_PEER, lines), 3);
+        assert!(!ip.is_empty(), "empty key for {lines:?}");
+        ip
+    }
+
+    #[test]
+    fn trust_proxy_3_missing_header_keys_on_peer() {
+        assert_eq!(key3(&[]), INNER_PEER);
+    }
+
+    #[test]
+    fn trust_proxy_3_empty_header_keys_on_peer() {
+        assert_eq!(key3(&[""]), INNER_PEER);
+        assert_eq!(key3(&[" , ,", "  "]), INNER_PEER);
+    }
+
+    #[test]
+    fn trust_proxy_3_one_entry_keys_on_it() {
+        assert_eq!(key3(&[EDGE]), EDGE);
+    }
+
+    #[test]
+    fn trust_proxy_3_direct_origin_keys_on_the_sender() {
+        // Origin hit without the CDN: the edge proxy drops client XFF and
+        // appends the sender, the inner proxy appends the edge proxy.
+        let a = key3(&[&format!("203.0.113.66, {EDGE}")]);
+        let b = key3(&[&format!("203.0.113.77, {EDGE}")]);
+        assert_eq!((a.as_str(), b.as_str()), ("203.0.113.66", "203.0.113.77"));
+    }
+
+    #[test]
+    fn trust_proxy_3_live_chain_keys_on_the_client() {
+        assert_eq!(key3(&[&format!("{CLIENT}, {CDN}, {EDGE}")]), CLIENT);
+    }
+
+    #[test]
+    fn trust_proxy_3_forged_prefix_is_ignored() {
+        assert_eq!(key3(&[&format!("1.2.3.4,{CLIENT}, {CDN}, {EDGE}")]), CLIENT);
+        assert_eq!(
+            key3(&[&format!(
+                "9.9.9.9, 8.8.8.8, 1.2.3.4, {CLIENT}, {CDN}, {EDGE}"
+            )]),
+            CLIENT
+        );
+    }
+
+    #[test]
+    fn trust_proxy_3_counts_entries_across_lines() {
+        assert_eq!(
+            key3(&["1.2.3.4", &format!("{CLIENT}, {CDN}"), EDGE]),
+            CLIENT
+        );
+        assert_eq!(key3(&["203.0.113.66", EDGE]), "203.0.113.66");
+    }
+
+    #[test]
+    fn trust_proxy_3_skips_blank_and_keeps_garbage_entries_verbatim() {
+        assert_eq!(
+            key3(&[" , ,", &format!("not-an-ip ,  {CLIENT} ,{CDN},{EDGE} ")]),
+            CLIENT
+        );
+        assert_eq!(key3(&[&format!("\t garbage!! , {EDGE}")]), "garbage!!");
+    }
+
+    #[test]
+    fn short_chains_never_panic_or_return_an_empty_key() {
+        let inputs: &[&[&str]] = &[
+            &[],
+            &[""],
+            &[","],
+            &[",,,", " "],
+            &["x"],
+            &["x", "y"],
+            &["a,b,c,d,e,f,g"],
+        ];
+        for lines in inputs {
+            for hops in [1, 2, 3, 4, 64, usize::MAX] {
+                let ip = client_ip_for(&forwarded(INNER_PEER, lines), hops);
+                assert!(!ip.is_empty(), "{lines:?} hops {hops}");
+            }
+        }
+    }
+
     #[test]
     fn auth_rate_limit_counts_a_second_forwarded_for_line() {
         // QA: a client-supplied first line used to mint a fresh bucket.
@@ -2156,7 +2260,7 @@ mod tests {
     }
 
     #[test]
-    fn forwarded_for_shorter_than_trusted_hops_falls_back_to_peer_ip() {
+    fn forwarded_for_shorter_than_trusted_hops_keys_on_the_leftmost_entry() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // SAFETY: ENV_LOCK is held for the whole test so TRUST_PROXY cannot race.
         unsafe {
@@ -2164,10 +2268,11 @@ mod tests {
         }
         let (state, dir) = test_state_locked();
         let now = config::now_ms();
-        // Only one hop present but two are configured: fail closed to the socket
-        // peer rather than trusting the client-supplied entry.
+        // Only one hop present but two are configured (an outer hop was
+        // skipped): key on the sender the first proxy appended, not on the
+        // socket peer every such request shares.
         for _ in 0..crate::stores::AUTH_RATE_LIMIT {
-            assert!(!state.auth_rate.check_and_record("10.0.0.1", now).limited);
+            assert!(!state.auth_rate.check_and_record("203.0.113.9", now).limited);
         }
         let mut req = Request::for_test("POST", "/api/signup");
         req.peer_ip = "10.0.0.1".into();

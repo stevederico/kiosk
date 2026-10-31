@@ -505,6 +505,26 @@ fn post_orders_rate_limit_key_skips_hops_across_lines() {
 }
 
 #[test]
+fn post_orders_short_chain_senders_get_separate_buckets() {
+    // TRUST_PROXY=3, origin hit without the CDN: `<sender>, <edge proxy>`.
+    // One sender exhausting its limit must not lock out another.
+    let st = state();
+    let n = SEQ.fetch_add(1, Ordering::Relaxed) % 250;
+    let post = |sender: &str| {
+        let mut r = post_json("/orders", r#"{"total":"1"}"#, Some(SAME_ORIGIN));
+        r.peer_ip = "192.0.2.10".into();
+        r.set_test_header("x-forwarded-for", &format!("{sender}, 192.0.2.4"));
+        let ip = crate::routes::client_ip_for(&r, 3);
+        assert_eq!(ip, sender);
+        post_orders(&st, &r, &ip).status
+    };
+    let first = format!("203.0.113.{n}");
+    let statuses: Vec<u16> = (0..=limit::ORDER_LIMIT).map(|_| post(&first)).collect();
+    assert_eq!(statuses.last(), Some(&429), "{statuses:?}");
+    assert_eq!(post(&format!("198.51.100.{n}")), 201);
+}
+
+#[test]
 fn get_orders_is_404() {
     assert_eq!(handle(&state(), req("GET", "/orders")).status, 404);
 }

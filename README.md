@@ -53,7 +53,7 @@ Code: `backend/src/kiosk/` (routes, schema/seeds, Rails encodings, browser check
 | `JWT_SECRET` | yes in production | Skateboard refuses to start without a 32+ char value. The kiosk issues no tokens; any random value works (`openssl rand -base64 48`) |
 | `PORT` | no (default 8000) | Listen port |
 | `STRIPE_KEY`, `STRIPE_ENDPOINT_SECRET` | no | Unused; the server logs a warning when unset |
-| `TRUST_PROXY` | behind a proxy | Number of trusted reverse proxies in front of the app. The `POST /orders` limit (10 per minute) keys on the client IP taken that many hops from the right of `X-Forwarded-For` (every line of the header, joined in order); unset, every client behind the proxy shares the proxy's one bucket. Set it to the real hop count before deploying (REPORT.md, "Deployment") |
+| `TRUST_PROXY` | behind a proxy | Number of trusted reverse proxies in front of the app. The `POST /orders` limit (10 per minute) keys on the client IP taken that many hops from the right of `X-Forwarded-For` (every line of the header, joined in order); a shorter chain (a request that skipped an outer hop) keys on its leftmost entry, the sender the first proxy appended; unset, every client behind the proxy shares the proxy's one bucket. Set it to the real hop count before deploying (REPORT.md, "Deployment") |
 | `CORS_ORIGINS`, `FRONTEND_URL`, `LIBSQL_URL`, `FREE_USAGE_LIMIT`, `APP_NAME` | no | Template options, unused by the kiosk |
 | `SKATEBOARD_BACKEND_DIR` | set by the image | Where `config.json` lives |
 
