@@ -31,7 +31,8 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 | `3f12ed1` | PARITY.md and REPORT.md results for 0.7.0 |
 | `dc5dbb1`, `b9b40ce` | REPORT.md: publish not done; held pending Steve's decision |
 | `0887064` | 0.7.1: every X-Forwarded-For line joined before `TRUST_PROXY` |
-| next | REPORT.md: production proxy findings, cutover settings, node 24.22.1 |
+| `7144294` | REPORT.md: production proxy findings, cutover settings, node 24.22.1 |
+| next | 0.7.2: internal infra notes moved out of the repo, analytics tag removed |
 
 ## How it was verified
 
@@ -48,17 +49,63 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 1. **`POST /orders`.** Decided: keep saving same-origin orders (approved by Steve 2026-10-30, 9:09 AM PT), with a per-IP rate limit (10 per minute, 429) and a 16 KiB body cap (413). Rails returns 422 to every request (CSRF on, and the page never gets a token), so orders are never saved in production; the kiosk page never calls it either. Here same-origin requests (`Origin` = host, or `Sec-Fetch-Site: same-origin` without `Origin`) create the order with Rails' create logic and response; curl, cross-site and no-Origin requests get the same 422 page as Rails. Both headers can be spoofed by a non-browser client, which is why the limit and cap exist
 2. **Front-end tests.** Brief said Vitest; house rules and skateboard use `node --test`. Used `node --test` (BLOCKERS.md). Keep, or approve Vitest + a DOM library
 3. **Font.** Switched the kiosk page to Tailwind v3's system font stack so it looks like the Rails page, instead of skateboard's Geist. Keep parity or switch to Geist
-4. **Analytics.** Kept the legacy analytics tag (same host, site id and domain lock as the Rails page). House default for new apps is apex-analytics; moving is a separate call
+4. **Analytics.** Removed in 0.7.2: the page ships no tracker and the CSP allows no third-party script or beacon host. Analytics, if wanted, are added outside the app
 5. **Data.** Rails had no volume: every deploy reset the menu and orders. This app keeps them on a volume (as asked). The menu only seeds on an empty volume, so later seed changes need a manual update or an empty volume
 6. **`JWT_SECRET`.** Skateboard will not start in production without one (32+ chars), even though the kiosk has no login. Set a random value
 7. **Skateboard version.** Done: updated from 5.10.0 / ui 5.4.0 to 5.13.0 / ui 5.11.0 (see "Upgrade to 5.13.0")
 8. **Template API.** Signup, signin, `/api/me`, checkout, portal, payment webhook stay in the code (for template updates) but answer 404 through the kiosk router
-9. **Headers.** Skateboard's set replaces Rails': `X-Frame-Options: DENY` (Rails `SAMEORIGIN`), a CSP that allows the analytics host and `data:` images, HSTS `max-age=31536000; includeSubDomains; preload` (Rails `max-age=63072000; includeSubDomains`). The `preload` token on a subdomain does nothing by itself
+9. **Headers.** Skateboard's set replaces Rails': `X-Frame-Options: DENY` (Rails `SAMEORIGIN`), a CSP that allows `data:` images and no third-party hosts, HSTS `max-age=31536000; includeSubDomains; preload` (Rails `max-age=63072000; includeSubDomains`). The `preload` token on a subdomain does nothing by itself
 10. **Repo.** No remote yet. Name and visibility (private by default) are Steve's call; `stevederico/kiosk` holds the Rails history
 
-## Proposed cutover (NOT executed)
+## Deployment (not executed)
 
-The production cutover plan (host and service names, proxy settings, steps and rollback) is kept in internal notes outside this repo.
+Production runs behind a CDN and two reverse proxies. Host names, service names, the current proxy settings, the rollback record and the step-by-step cutover runbook are kept outside this repo (internal notes, not published).
+
+**`TRUST_PROXY`: hop count, read from the proxy configuration**
+
+What reaches the app, hop by hop, in the current setup:
+
+1. CDN → edge proxy. The CDN sends `X-Forwarded-For: [<client's own XFF>, ]<client IP>`. The host firewall lets only the CDN's ranges reach 80/443
+2. Reverse proxy at the edge. It does not trust forwarded headers from the CDN: it drops any `X-Forwarded-For` it receives and appends the connection's remote address, so it forwards `X-Forwarded-For: <CDN edge IP>`. The client IP and anything the client sent are dropped here
+3. Second reverse proxy: appends the address it received the request from (the edge proxy's internal address) and does not rewrite the client address
+4. App: one header line, `X-Forwarded-For: <CDN edge IP>, <edge proxy IP>`; socket peer is the inner proxy
+
+| `TRUST_PROXY` | Key used by the order limit (and auth rate limit) |
+|---|---|
+| unset / `0` | The inner proxy's address: every visitor shares one bucket (10 orders per minute site-wide) |
+| `1` | The edge proxy's internal address: same, one shared bucket |
+| **`2`** | **CDN edge IP.** Not client-controlled (the edge proxy drops client XFF; only the CDN reaches the host). Coarse: visitors who reach the same CDN edge address share a bucket. For kiosks in one food court they share a NAT address anyway |
+| `3` | Chain too short, falls back to the peer: one shared bucket. Wrong today |
+
+For a per-visitor key: make the edge proxy trust forwarded headers from the CDN's address ranges. It then keeps the CDN's header and appends the edge address, the app sees `[client junk, ]<client IP>, <CDN edge IP>, <edge proxy IP>`, and `TRUST_PROXY=3` gives the client IP. That is a proxy change outside this app (Steve's call; not done). Not verified on the wire
+
+**Service settings (side by side with the Rails app, recommended)**
+
+| Setting | Value |
+|---|---|
+| Image | `kiosk-rs:<git sha of the deployed commit>`, built from a clean `git archive`, `--platform linux/amd64`, pushed only to a private registry |
+| Ports | **None published.** The app is reached only by the inner proxy over the internal network, on port 8000 |
+| Env | `JWT_SECRET=<openssl rand -base64 48>`, `TRUST_PROXY=2`. `NODE_ENV=production` and the port come from the image; no Stripe vars (the kiosk closes the template payment routes) |
+| Data | Host directory owned 999:999 mounted at `/app/backend/databases` |
+| Replicas / health | 1 replica. The image's `HEALTHCHECK` hits `127.0.0.1:8000/api/health` |
+
+**Callout: skateboard 5.13.0 (`cfec801`) at first start**
+
+- Schema: on every start `backend/src/db.rs` checks `Users` and runs `ALTER TABLE Users ADD COLUMN subscription_id TEXT` when the column is missing (lines 907 and 990; test `migrates_stale_users_table`). A new, empty data directory simply gets the table with the column; the Rails kiosk keeps no data, so nothing is migrated from it
+- Back up first anyway whenever an image is deployed onto an existing kiosk data directory (a test deploy, a rollback, later updates): copy the directory with the service stopped, or `sqlite3 Kiosk.db ".backup ..."` live. A 0.5.0 image would ignore the extra column, so rolling back is safe once the DB is copied
+- Stripe webhook changes in 5.12.0 (re-fetch the subscription from Stripe, old-subscription events no longer re-lock, DB errors answer 500 so Stripe retries): no effect on the kiosk. `/api/payment` and the other template account and billing routes answer 404 through the kiosk router (decision 8), no `STRIPE_*` env is set, and no webhook forwarder sends kiosk events. Do not add one
+
+**Steps (outline)**
+
+1. Publish the code (deploy rule: committed, pushed, tagged)
+2. Build the image from a clean `git archive` of the published commit; push it to the private registry
+3. Create the data directory (owner 999:999) and a new service with the settings above, next to the Rails app
+4. Deploy, wait for healthy, check `/menu_items` from the internal network
+5. Point the inner proxy's kiosk upstream at the new service on port 8000 (env only, no proxy code change)
+6. Verify through the CDN with a browser UA: `/` 200, `/menu_items` JSON, `/api/health` ok, page loads in a browser
+7. Add the SQLite file to the host's backups (README "Backups")
+
+Rollback: point the kiosk upstream back at the recorded Rails value and redeploy the inner proxy. No data to move back: the Rails app keeps none. Retire the Rails app only after Steve says so.
 
 ## Unknown (not checked)
 
@@ -200,9 +247,9 @@ How the dates were found:
 
 **Open**
 
-- `TRUST_PROXY` must be set to the real hop count in production, or all kiosks share one order bucket (cutover plan)
-- Current proxy upstream for the kiosk: record before cutover
-- Not published: `stevederico/kiosk` is archived (pushes are refused) and public, and this report names internal infra. Publish held on 2026-10-30 pending Steve's decision (repo is archived and public); not yet decided by Steve. Planned procedure when unblocked: branch `rails` at the old master `7c8be77`, a `git commit-tree` merge of `7c8be77` and this `master` with this tree, fast-forward push of `master`, annotated tag `0.7.0` on the merge. No tag was created locally, so it can go on that merge commit
+- `TRUST_PROXY` must be set to the real hop count in production, or all kiosks share one order bucket (see "Deployment")
+- Current proxy upstream for the kiosk: record before cutover (recorded in the internal notes)
+- Not published: `stevederico/kiosk` is archived (pushes are refused) and public, and this report named internal infra (moved out in 0.7.2). Publish held on 2026-10-30 pending Steve's decision (repo is archived and public); not yet decided by Steve. Planned procedure when unblocked: branch `rails` at the old master `7c8be77`, a `git commit-tree` merge of `7c8be77` and this `master` with this tree, fast-forward push of `master`, annotated tag `0.7.0` on the merge. No tag was created locally, so it can go on that merge commit
 - Rails also answers 400 to a deep form body on `GET /` (any method reads params); this app ignores GET bodies (200). Not a risk, not changed
 - No 413/429 page in Rails' style: they answer short `text/plain`. Rails never produced these statuses
 
@@ -218,10 +265,18 @@ Done 2026-10-30 after QA re-gated `b9b40ce` (PASS with conditions). Local, plus 
 - `cargo test --locked`: 376 passed, 0 failed, 1 ignored. `npm test` (`node --test`): 57 passed. Clippy `-D warnings`: 0. `cargo fmt --check`: clean. `cargo build --release --locked`: ok. `Cargo.lock` unchanged
 - Image `kiosk-gatefix:0.7.1` (`docker build --pull` from a clean clone, `sha256:78b03c15ace7...`, 141,679,354 bytes) with `TRUST_PROXY=1`: 13 POSTs, each with a new first XFF line and the same second line: 10 × 201, then 429. A different second line: 201
 
-**Hop count and port exposure:** `TRUST_PROXY=2`, no published ports, internal network only, rollback value recorded (details in the internal cutover notes).
+**Hop count and port exposure:** see "Deployment": `TRUST_PROXY=2`, no published ports, internal network only, rollback value recorded in the internal notes.
 
 **node 24.22.1 (not bumped)**
 
 - Security release, 2026-10-21 ([release notes](https://nodejs.org/en/blog/release/v24.22.1)). High: CVE-2026-106069 and CVE-2026-106072 (TLS rejects non-canonical IP addresses), CVE-2026-105482 (DNS resolve inputs with null bytes), CVE-2026-105483 (TLS IP normalization regression), CVE-2026-111497 (Brotli decoder out-of-bounds write). Medium: CVE-2026-105481 (HTTP agent data guard), CVE-2026-106074 (crypto random caches across snapshots). Low: CVE-2026-106073 (permission model in `realpathSync`). Also OpenSSL 3.5.9, c-ares 1.34.9, undici 7.30.1, tzdata 2026e
 - Effect here: low. Node runs only in the `frontend` build stage (`npm ci --ignore-scripts`, `vite build`); the runtime image is the Rust binary on debian slim with no Node. The build talks only to registry.npmjs.org by hostname (not an IP literal), uses no permission model, no snapshots, no Node server. The Brotli and HTTP-agent fixes matter most for a build that downloads packages, and npm verifies every tarball against `package-lock.json` integrity hashes
 - 7-day rule: the current `24.22.1-bookworm-slim` digest (`be8204d4...`) is from Oct 28 (too new), but its first builds are older. `node@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205` (OCI index, `NODE_VERSION=24.22.1`, amd64 config created 2026-10-21T11:35Z) was first recorded by docker-library/repo-info at 2026-10-21T17:56Z, which meets the rule. Not pinned (brief: report only). It is the candidate for the next bump
+
+## Publish scrub (0.7.2)
+
+Done 2026-10-31. Local only: nothing pushed, deployed or changed in production.
+
+- Internal infrastructure notes (host and service names, proxy and registry details, backup script paths, internal addresses) moved out of every tracked file into internal notes outside the repo. "Deployment" above now describes the setup in generic terms
+- The third-party analytics tag is gone from `index.html`; the kiosk CSP allows only `'self'` scripts and connections again (plus `data:` images). The UI's `data-*` event attributes are renamed `data-testid` (used by `scripts/parity/ui-scenario.sh`)
+- `cargo test --locked`: 376 passed, 0 failed, 1 ignored. `npm test` (`node --test`): 57 passed. Clippy `-D warnings`: 0. `cargo fmt --check`: clean

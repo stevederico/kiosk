@@ -68,8 +68,8 @@ Legend: `[ ]` to do, `[x]` built + tested + verified, `[-]` not ported on purpos
 
 ## 7. Analytics
 
-- [x] Third-party analytics tag on the kiosk page (public site id, not a secret)
-- [-] Same tag in `layouts/application.html.erb`: the layout is never rendered (only route uses `layout: false`). Covered by the page tag above
+- [-] Third-party analytics tag on the kiosk page: ported in 0.5.0, removed in 0.7.2. The app ships no tracker; analytics, if wanted, are added outside the app
+- [-] Same tag in `layouts/application.html.erb`: the layout is never rendered (only route uses `layout: false`)
 
 ## 8. PWA
 
@@ -120,7 +120,7 @@ Differences on purpose (details and Steve's decisions in REPORT.md):
 
 - `POST /orders`: Rails rejects every request (CSRF, no token is ever issued). Here a same-origin browser request (`Origin` = host, or `Sec-Fetch-Site: same-origin`) is saved, a deliberate difference Steve approved on 2026-10-30 (REPORT.md decision 1); everything else gets the same 422 page. Not in Rails either: a body over 16 KiB is 413 and an 11th POST in a minute from one IP is 429
 - `GET /api/health`: added for the container health check (Rails: 404)
-- Headers: skateboard's security headers (`X-Frame-Options: DENY`, CSP with the analytics host, HSTS 1 year + preload) instead of Rails' (`SAMEORIGIN`, no CSP, HSTS 2 years). `Cache-Control` and weak `ETag`/304 match Rails' shape; ETag values differ (sha256 vs md5)
+- Headers: skateboard's security headers (`X-Frame-Options: DENY`, CSP with `data:` images and no third-party hosts, HSTS 1 year + preload) instead of Rails' (`SAMEORIGIN`, no CSP, HSTS 2 years). `Cache-Control` and weak `ETag`/304 match Rails' shape; ETag values differ (sha256 vs md5)
 - `/kiosk.html` is not cached for a year (Rails: `public, max-age=31556952`), so a deploy is never hidden behind a stale page
 - Page: emoji icons (pointer, hot dog) are Lucide icons; the edit dialog closes on Escape and traps focus; a failed menu load shows an error with Try Again (Rails showed an empty grid); the unreachable "Your cart is empty!" `alert()` is dropped
 - The menu grid unmounts on checkout instead of staying hidden in the DOM (same on screen)

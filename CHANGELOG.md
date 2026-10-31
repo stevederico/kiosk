@@ -1,5 +1,11 @@
 # Changelog
 
+0.7.2
+
+  Remove infra notes
+  Remove analytics tag
+  Tighten CSP
+
 0.7.1
 
   Join forwarded lines
