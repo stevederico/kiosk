@@ -1,5 +1,10 @@
 # Changelog
 
+0.7.3
+
+  Key short chains
+  TRUST_PROXY 3
+
 0.7.2
 
   Remove infra notes

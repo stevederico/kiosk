@@ -61,23 +61,25 @@ Rails 8 kiosk (`~/Projects/kiosk` @ `7c8be77`, live at kiosk.bixbyapps.com) rewr
 
 Production runs behind a CDN and two reverse proxies. Host names, service names, the current proxy settings, the rollback record and the step-by-step cutover runbook are kept outside this repo (internal notes, not published).
 
-**`TRUST_PROXY`: hop count, read from the proxy configuration**
+**`TRUST_PROXY=3`: the edge proxy trusts the CDN (changed 2026-10-31)**
 
-What reaches the app, hop by hop, in the current setup:
+What reaches the app, hop by hop:
 
 1. CDN → edge proxy. The CDN sends `X-Forwarded-For: [<client's own XFF>, ]<client IP>`. The host firewall lets only the CDN's ranges reach 80/443
-2. Reverse proxy at the edge. It does not trust forwarded headers from the CDN: it drops any `X-Forwarded-For` it receives and appends the connection's remote address, so it forwards `X-Forwarded-For: <CDN edge IP>`. The client IP and anything the client sent are dropped here
+2. Edge proxy: trusts forwarded headers from the CDN's address ranges, so it keeps the CDN's header and appends the CDN edge address. From any other sender it drops `X-Forwarded-For` and appends that sender's address
 3. Second reverse proxy: appends the address it received the request from (the edge proxy's internal address) and does not rewrite the client address
-4. App: one header line, `X-Forwarded-For: <CDN edge IP>, <edge proxy IP>`; socket peer is the inner proxy
+4. App: `X-Forwarded-For: [<client junk>, ]<client IP>, <CDN edge IP>, <edge proxy IP>`; socket peer is the inner proxy
 
 | `TRUST_PROXY` | Key used by the order limit (and auth rate limit) |
 |---|---|
 | unset / `0` | The inner proxy's address: every visitor shares one bucket (10 orders per minute site-wide) |
 | `1` | The edge proxy's internal address: same, one shared bucket |
-| **`2`** | **CDN edge IP.** Not client-controlled (the edge proxy drops client XFF; only the CDN reaches the host). Coarse: visitors who reach the same CDN edge address share a bucket. For kiosks in one food court they share a NAT address anyway |
-| `3` | Client IP once the edge proxy trusts the CDN's ranges (below). A request that skips the CDN arrives as `<sender>, <edge proxy IP>`, shorter than 3: it keys on the leftmost entry, the sender the edge proxy appended, so each sender has its own bucket. Safe only because the edge proxy drops client-sent `X-Forwarded-For` from untrusted senders |
+| `2` | CDN edge IP: coarse, visitors who reach the same CDN edge address share a bucket |
+| **`3`** | **Client IP** (third from the right). Entries the client put in front are ignored. A request that skips the CDN arrives as `<sender>, <edge proxy IP>`: shorter than 3, so it keys on its leftmost entry, the sender the edge proxy appended (since 0.7.3; before, every such request shared the inner proxy's bucket). An empty chain keys on the socket peer |
 
-For a per-visitor key: make the edge proxy trust forwarded headers from the CDN's address ranges. It then keeps the CDN's header and appends the edge address, the app sees `[client junk, ]<client IP>, <CDN edge IP>, <edge proxy IP>`, and `TRUST_PROXY=3` gives the client IP. That is a proxy change outside this app (Steve's call; not done). Not verified on the wire
+Short chains: the leftmost entry is trustworthy only because the edge proxy drops client-sent `X-Forwarded-For` from senders outside the CDN's ranges. Requests that reach the edge proxy through a relay that hides the sender (every request appearing to come from one local address) share that relay's key. If a hop can be bypassed to a proxy that keeps a client-sent header, the leftmost entry is client-controlled.
+
+Template drift: `client_ip_for` in `backend/src/routes.rs` is vendored from skateboard and now differs from upstream (a short chain keys on its leftmost entry instead of the socket peer; the template test `forwarded_for_shorter_than_trusted_hops_falls_back_to_peer_ip` is replaced by `forwarded_for_shorter_than_trusted_hops_keys_on_the_leftmost_entry`). A template merge with `scripts/update-skateboard.js` must keep this fix.
 
 **Service settings (side by side with the Rails app, recommended)**
 
@@ -85,7 +87,7 @@ For a per-visitor key: make the edge proxy trust forwarded headers from the CDN'
 |---|---|
 | Image | `kiosk-rs:<git sha of the deployed commit>`, built from a clean `git archive`, `--platform linux/amd64`, pushed only to a private registry |
 | Ports | **None published.** The app is reached only by the inner proxy over the internal network, on port 8000 |
-| Env | `JWT_SECRET=<openssl rand -base64 48>`, `TRUST_PROXY=2`. `NODE_ENV=production` and the port come from the image; no Stripe vars (the kiosk closes the template payment routes) |
+| Env | `JWT_SECRET=<openssl rand -base64 48>`, `TRUST_PROXY=3`. `NODE_ENV=production` and the port come from the image; no Stripe vars (the kiosk closes the template payment routes) |
 | Data | Host directory owned 999:999 mounted at `/app/backend/databases` |
 | Replicas / health | 1 replica. The image's `HEALTHCHECK` hits `127.0.0.1:8000/api/health` |
 
@@ -280,3 +282,12 @@ Done 2026-10-31. Local only: nothing pushed, deployed or changed in production.
 - Internal infrastructure notes (host and service names, proxy and registry details, backup script paths, internal addresses) moved out of every tracked file into internal notes outside the repo. "Deployment" above now describes the setup in generic terms
 - The third-party analytics tag is gone from `index.html`; the kiosk CSP allows only `'self'` scripts and connections again (plus `data:` images). The UI's `data-*` event attributes are renamed `data-testid` (used by `scripts/parity/ui-scenario.sh`)
 - `cargo test --locked`: 376 passed, 0 failed, 1 ignored. `npm test` (`node --test`): 57 passed. Clippy `-D warnings`: 0. `cargo fmt --check`: clean
+
+## 0.7.3: short X-Forwarded-For chains
+
+Done 2026-10-31. Local only: nothing pushed or deployed.
+
+- With `TRUST_PROXY=3`, a non-empty chain shorter than 3 (a request that skipped the CDN) keyed on the socket peer, which is the inner proxy for every request: all such senders shared one order bucket. It now keys on the chain's leftmost entry, the sender the edge proxy appended. Empty chain: socket peer, as before (`routes::client_ip_for`)
+- 10 new tests (missing, empty, 1, 2, 3, 4+ entries, several lines, blank and garbage entries, no panic or empty key for any hop count, two short-chain senders get separate `POST /orders` buckets); one template test rewritten for the new behavior
+- Docs: README and `docs/GUIDE.md` `TRUST_PROXY` rows, `backend/.env.example`, "Deployment" above (`TRUST_PROXY=3`)
+- `cargo test --locked`: 386 passed, 0 failed, 1 ignored. `npm test` (`node --test`): 57 passed. Clippy `-D warnings`: 0. `cargo fmt --check`: clean
