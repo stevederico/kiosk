@@ -2,7 +2,7 @@
 
 Self-service food court kiosk ("Frankie Food Court Kiosk"): tap menu items, edit the receipt, check out on a mock PIN pad.
 
-Rewrite of the Rails 8 kiosk (`~/Projects/kiosk`, commit `7c8be77`) on the skateboard stack: React + Vite front end, zero-crate Rust backend, SQLite. Scaffolded with `create-skateboard-app` 2.1.1 (skateboard 5.10.0), updated to skateboard 5.13.0 and skateboard-ui 5.11.0 with `scripts/update-skateboard.js`. Feature checklist: [PARITY.md](PARITY.md). Verification results: [REPORT.md](REPORT.md).
+A rewrite of the original Rails 8 kiosk on the skateboard stack: React + Vite front end, zero-crate Rust backend, SQLite. Scaffolded with `create-skateboard-app` 2.1.1 (skateboard 5.10.0), updated to skateboard 5.13.0 and skateboard-ui 5.11.0 with `scripts/update-skateboard.js`. Feature checklist: [PARITY.md](PARITY.md). Verification results: [REPORT.md](REPORT.md).
 
 ## Run
 

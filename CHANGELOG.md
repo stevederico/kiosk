@@ -1,5 +1,9 @@
 # Changelog
 
+0.8.0
+
+  Drop local path from README
+
 0.7.3
 
   Key short chains
