@@ -1,5 +1,9 @@
 # Changelog
 
+0.8.1
+
+  Bump debian runtime base to bookworm-20261104-slim (apt 2.6.2)
+
 0.8.0
 
   Drop local path from README
